@@ -1,9 +1,13 @@
 # ui/vendas_ui.py
 import os
 import sqlite3
-import tkinter as tk
+
 from tkinter import ttk, messagebox
 from datetime import datetime
+
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+
 
 DB_PATH = os.path.join("database", "acaiteria.db")
 
@@ -14,7 +18,7 @@ def get_connection():
     return sqlite3.connect(DB_PATH)
 
 
-class VendasUI(tk.Toplevel):
+class VendasUI(ttk.Toplevel):
     """
     Tela de Vendas (janela filha).
     Uso: VendasUI(master=root, operador='Joao', role='operador')
@@ -33,53 +37,53 @@ class VendasUI(tk.Toplevel):
         self.carregar_vendas()  # carrega ao abrir
 
     def _build_ui(self):
-        frame_top = tk.Frame(self)
+        frame_top = ttk.Frame(self)
         frame_top.pack(fill="x", padx=8, pady=6)
 
         # Formulário rápido
-        tk.Label(frame_top, text="Tipo:").grid(row=0, column=0, sticky="w")
+        ttk.Label(frame_top, text="Tipo:").grid(row=0, column=0, sticky="w")
         self.tipo_cb = ttk.Combobox(frame_top, values=["Picolé", "Sorvete a Granel", "Copo 300ml", "Outros"], state="readonly")
         self.tipo_cb.current(0)
         self.tipo_cb.grid(row=0, column=1, padx=6)
 
-        tk.Label(frame_top, text="Sabor:").grid(row=0, column=2, sticky="w")
-        self.sabor_ent = tk.Entry(frame_top)
+        ttk.Label(frame_top, text="Sabor:").grid(row=0, column=2, sticky="w")
+        self.sabor_ent = ttk.Entry(frame_top)
         self.sabor_ent.grid(row=0, column=3, padx=6)
 
-        tk.Label(frame_top, text="Qtd (Kg/Unid):").grid(row=0, column=4, sticky="w")
-        self.qtd_ent = tk.Entry(frame_top, width=8)
+        ttk.Label(frame_top, text="Qtd (Kg/Unid):").grid(row=0, column=4, sticky="w")
+        self.qtd_ent = ttk.Entry(frame_top, width=8)
         self.qtd_ent.grid(row=0, column=5, padx=6)
 
-        tk.Label(frame_top, text="Valor Unit (R$):").grid(row=0, column=6, sticky="w")
-        self.valor_ent = tk.Entry(frame_top, width=10)
+        ttk.Label(frame_top, text="Valor Unit (R$):").grid(row=0, column=6, sticky="w")
+        self.valor_ent = ttk.Entry(frame_top, width=10)
         self.valor_ent.grid(row=0, column=7, padx=6)
 
-        tk.Label(frame_top, text="Pagamento:").grid(row=1, column=0, sticky="w", pady=6)
+        ttk.Label(frame_top, text="Pagamento:").grid(row=1, column=0, sticky="w", pady=6)
         self.pgto_cb = ttk.Combobox(frame_top, values=["Pix", "Crédito", "Débito", "Dinheiro"], state="readonly")
         self.pgto_cb.current(0)
         self.pgto_cb.grid(row=1, column=1, padx=6)
 
-        tk.Label(frame_top, text="Observações:").grid(row=1, column=2, sticky="w")
-        self.obs_ent = tk.Entry(frame_top, width=40)
+        ttk.Label(frame_top, text="Observações:").grid(row=1, column=2, sticky="w")
+        self.obs_ent = ttk.Entry(frame_top, width=40)
         self.obs_ent.grid(row=1, column=3, columnspan=3, padx=6, sticky="w")
 
-        btn_registrar = tk.Button(frame_top, text="Registrar Venda", command=self.on_registrar)
+        btn_registrar = ttk.Button(frame_top, text="Registrar Venda", command=self.on_registrar)
         btn_registrar.grid(row=1, column=7, padx=6)
 
         # Botões inferiores
-        frame_mid = tk.Frame(self)
+        frame_mid = ttk.Frame(self)
         frame_mid.pack(fill="x", padx=8, pady=6)
-        self.btn_excluir = tk.Button(frame_mid, text="Excluir Venda Selecionada", command=self.on_excluir)
+        self.btn_excluir = ttk.Button(frame_mid, text="Excluir Venda Selecionada", command=self.on_excluir)
         self.btn_excluir.pack(side="left")
         if self.role != "admin":
             # operadores não podem excluir
             self.btn_excluir.config(state="disabled")
 
-        self.btn_atualizar = tk.Button(frame_mid, text="Atualizar", command=self.carregar_vendas)
+        self.btn_atualizar = ttk.Button(frame_mid, text="Atualizar", command=self.carregar_vendas)
         self.btn_atualizar.pack(side="left", padx=6)
 
         # Tabela de vendas
-        frame_table = tk.Frame(self)
+        frame_table = ttk.Frame(self)
         frame_table.pack(fill="both", expand=True, padx=8, pady=6)
 
         cols = ("id", "data_venda", "tipo_produto", "sabor", "quantidade", "valor_unit", "valor_total", "forma_pagamento", "operador")
@@ -118,10 +122,10 @@ class VendasUI(tk.Toplevel):
 
             messagebox.showinfo("Sucesso", f"Venda registrada (R$ {valor_total:.2f})")
             # limpa campos
-            self.sabor_ent.delete(0, tk.END)
-            self.qtd_ent.delete(0, tk.END)
-            self.valor_ent.delete(0, tk.END)
-            self.obs_ent.delete(0, tk.END)
+            self.sabor_ent.delete(0, ttk.END)
+            self.qtd_ent.delete(0, ttk.END)
+            self.valor_ent.delete(0, ttk.END)
+            self.obs_ent.delete(0, ttk.END)
             self.carregar_vendas()
         except ValueError:
             messagebox.showwarning("Entrada inválida", "Verifique quantidade e valor unitário (use ponto como decimal).")

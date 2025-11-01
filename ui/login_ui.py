@@ -1,4 +1,6 @@
 # ui/login_ui.py
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 import tkinter as tk
 from tkinter import messagebox
 import subprocess
@@ -14,16 +16,8 @@ class LoginUI(tk.Frame):
         self.pack(fill="both", expand=True)
         self._build_ui()
 
-    def _build_ui(self):
-        tk.Label(self, text="Usuário:").pack(pady=5)
-        self.username_entry = tk.Entry(self)
-        self.username_entry.pack()
-
-        tk.Label(self, text="Senha:").pack(pady=5)
-        self.password_entry = tk.Entry(self, show="*")
-        self.password_entry.pack()
-
-        tk.Button(self, text="Entrar", command=self.login).pack(pady=15)
+    
+    
 
     def login(self):
         username = self.username_entry.get().strip()

@@ -1,7 +1,12 @@
 # ui/admin_users_ui.py
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+
 from services.auth_service import create_user, list_users, get_user_by_id, update_user, delete_user
+
+
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox, simpledialog
+
 
 class UserForm(simpledialog.Dialog):
     def __init__(self, parent, title=None, user=None):
@@ -9,19 +14,19 @@ class UserForm(simpledialog.Dialog):
         super().__init__(parent, title=title)
 
     def body(self, master):
-        tk.Label(master, text="Username:").grid(row=0, column=0, sticky='e')
-        self.username_entry = tk.Entry(master)
+        ttk.Label(master, text="Username:").grid(row=0, column=0, sticky='e')
+        self.username_entry = ttk.Entry(master)
         self.username_entry.grid(row=0, column=1)
 
-        tk.Label(master, text="Senha:").grid(row=1, column=0, sticky='e')
-        self.password_entry = tk.Entry(master, show="*")
+        ttk.Label(master, text="Senha:").grid(row=1, column=0, sticky='e')
+        self.password_entry = ttk.Entry(master, show="*")
         self.password_entry.grid(row=1, column=1)
 
-        tk.Label(master, text="Nome (exibido):").grid(row=2, column=0, sticky='e')
-        self.display_entry = tk.Entry(master)
+        ttk.Label(master, text="Nome (exibido):").grid(row=2, column=0, sticky='e')
+        self.display_entry = ttk.Entry(master)
         self.display_entry.grid(row=2, column=1)
 
-        tk.Label(master, text="Perfil:").grid(row=3, column=0, sticky='e')
+        ttk.Label(master, text="Perfil:").grid(row=3, column=0, sticky='e')
         self.role_combo = ttk.Combobox(master, values=["user", "admin"], state="readonly")
         self.role_combo.grid(row=3, column=1)
 
@@ -59,13 +64,13 @@ class AdminUsersUI:
         self.tree.pack(expand=True, fill="both", padx=10, pady=10)
 
         # Buttons
-        btn_frame = tk.Frame(master)
+        btn_frame = ttk.Frame(master)
         btn_frame.pack(fill="x", padx=10, pady=5)
-        tk.Button(btn_frame, text="Novo Usuário", command=self.new_user).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Editar", command=self.edit_user).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Excluir", command=self.delete_user).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Atualizar Listagem", command=self.load_users).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Fechar", command=master.destroy).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text="Novo Usuário", command=self.new_user).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Editar", command=self.edit_user).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Excluir", command=self.delete_user).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Atualizar Listagem", command=self.load_users).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Fechar", command=master.destroy).pack(side="right", padx=5)
 
         self.load_users()
 
