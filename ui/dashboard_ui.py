@@ -1,81 +1,78 @@
-import subprocess
+# ui/dashboard_ui.py
 import sys
 import os
+import subprocess
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
 
+# Garante que os módulos sejam encontrados mesmo quando executados via subprocess
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class DashboardUI(ttk.Window):
     def __init__(self, display_name, role):
-        super().__init__()
-        self.title("Açaiteria o Sabor da Fruta - Painel Principal")
-        self.geometry("600x400")
+        super().__init__(themename="superhero")
+        self.title("🍧 Açaiteria o Sabor da Fruta - Painel Principal")
+        self.geometry("600x450")
         self.display_name = display_name
         self.role = role
 
         self._build_ui()
 
     def _build_ui(self):
-        # ====== Título superior ======
-        header = ttk.Frame(self, padding=10)
-        header.pack(fill=X)
-
         ttk.Label(
-            header,
+            self,
             text=f"Bem-vindo(a), {self.display_name}!",
-            font=("Segoe UI", 14, "bold")
-        ).pack(side=LEFT, padx=10)
-
+            font=("Segoe UI", 16, "bold")
+        ).pack(pady=10)
         ttk.Label(
-            header,
+            self,
             text=f"Perfil: {self.role.capitalize()}",
             font=("Segoe UI", 11)
-        ).pack(side=RIGHT, padx=10)
+        ).pack(pady=5)
 
-        # ====== Menu lateral ======
-        menu_frame = ttk.Frame(self, bootstyle="secondary", padding=10)
-        menu_frame.pack(side=LEFT, fill=Y)
-
-        ttk.Label(menu_frame, text="Menu", font=("Segoe UI", 13, "bold")).pack(pady=10)
+        menu_frame = ttk.Frame(self, padding=10)
+        menu_frame.pack(pady=15)
 
         # Opções comuns a todos
-        ttk.Button(menu_frame, text="Vendas", bootstyle=SUCCESS, width=25, command=self.abrir_vendas).pack(pady=5)
-        ttk.Button(menu_frame, text="Bater Ponto", bootstyle=INFO, width=25, command=self.bater_ponto).pack(pady=5)
+        ttk.Button(menu_frame, text="🛒 Vendas", width=25, bootstyle=SUCCESS,
+                   command=self.abrir_vendas).pack(pady=5)
+        ttk.Button(menu_frame, text="⏰ Bater Ponto", width=25, bootstyle=INFO,
+                   command=self.bater_ponto).pack(pady=5)
 
         # Opções exclusivas do admin
         if self.role == "admin":
-            ttk.Separator(menu_frame, orient=HORIZONTAL).pack(fill=X, pady=10)
-            ttk.Button(menu_frame, text="Produtos", bootstyle=PRIMARY, width=25, command=self.abrir_produtos).pack(pady=5)
-            ttk.Button(menu_frame, text="Relatórios", bootstyle=PRIMARY, width=25, command=self.abrir_relatorios).pack(pady=5)
-            ttk.Button(menu_frame, text="Usuários", bootstyle=PRIMARY, width=25, command=self.abrir_usuarios).pack(pady=5)
+            ttk.Separator(menu_frame, orient="horizontal").pack(fill=X, pady=8)
+            ttk.Button(menu_frame, text="📦 Produtos", width=25, bootstyle=PRIMARY,
+                       command=self.abrir_produtos).pack(pady=5)
+            ttk.Button(menu_frame, text="👤 Usuários", width=25, bootstyle=SECONDARY,
+                       command=self.abrir_usuarios).pack(pady=5)
+            ttk.Button(menu_frame, text="📈 Relatórios", width=25, bootstyle=WARNING,
+                       command=self.abrir_relatorios).pack(pady=5)
 
-        ttk.Separator(menu_frame, orient=HORIZONTAL).pack(fill=X, pady=10)
-        ttk.Button(menu_frame, text="Sair do Sistema", bootstyle=DANGER, width=25, command=self.sair).pack(pady=10)
+        ttk.Button(self, text="🚪 Sair", bootstyle=DANGER,
+                   command=self.sair).pack(pady=25)
 
-        # ====== Área principal (conteúdo dinâmico futuro) ======
-        self.main_frame = ttk.Frame(self, padding=20)
-        self.main_frame.pack(side=RIGHT, fill=BOTH, expand=True)
+    # ==== AÇÕES DO MENU ====
 
-        ttk.Label(self.main_frame, text="Painel do Sistema", font=("Segoe UI", 15, "bold")).pack(pady=50)
-
-    # ========================================================
-    #               AÇÕES DOS BOTÕES
-    # ========================================================
     def abrir_vendas(self):
         self.destroy()
-        subprocess.Popen([sys.executable, "ui/vendas_ui.py", self.display_name, self.role])
+        subprocess.Popen([sys.executable, "ui/vendas_ui.py",
+                          self.display_name, self.role])
 
     def abrir_produtos(self):
+        """Abre o módulo de produtos sem quebrar o contexto da janela."""
         self.destroy()
-        subprocess.Popen([sys.executable, "ui/produtos_ui.py", self.display_name, self.role])
-
-    def abrir_relatorios(self):
-        messagebox.showinfo("Relatórios", "Módulo de relatórios em desenvolvimento.")
+        subprocess.Popen([sys.executable, "ui/produtos_ui.py",
+                          self.display_name, self.role])
 
     def abrir_usuarios(self):
         self.destroy()
-        subprocess.Popen([sys.executable, "ui/usuarios_ui.py", self.display_name, self.role])
+        subprocess.Popen([sys.executable, "ui/usuarios_ui.py",
+                          self.display_name, self.role])
+
+    def abrir_relatorios(self):
+        messagebox.showinfo("Relatórios", "Módulo de relatórios em desenvolvimento.")
 
     def bater_ponto(self):
         messagebox.showinfo("Ponto", f"Ponto registrado para {self.display_name}!")
@@ -85,6 +82,7 @@ class DashboardUI(ttk.Window):
         subprocess.Popen([sys.executable, "main.py"])
 
 
+# Execução direta (para teste)
 if __name__ == "__main__":
     if len(sys.argv) >= 3:
         display_name = sys.argv[1]
