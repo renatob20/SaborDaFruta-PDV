@@ -1,5 +1,13 @@
 # models/produto_model.py
-from database.db_connection import get_connection
+import os
+import sys
+
+# Garante que a raiz do projeto esteja no sys.path
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from database.db import get_connection  # seu arquivo é db.py
 
 def criar_tabela_produtos():
     conn = get_connection()
@@ -7,41 +15,41 @@ def criar_tabela_produtos():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS produtos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
         tipo TEXT NOT NULL,
         sabor TEXT NOT NULL,
-        preco REAL NOT NULL
+        preco REAL NOT NULL,
+        estoque INTEGER DEFAULT 0
     );
     """)
     conn.commit()
     conn.close()
 
-def inserir_produto(nome, tipo, sabor, preco):
+def inserir_produto(tipo, sabor, preco, estoque=0):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO produtos (nome, tipo, sabor, preco)
+        INSERT INTO produtos (tipo, sabor, preco, estoque)
         VALUES (?, ?, ?, ?)
-    """, (nome, tipo, sabor, preco))
+    """, (tipo, sabor, float(preco), int(estoque)))
     conn.commit()
     conn.close()
 
 def listar_produtos():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, nome, tipo, sabor, preco FROM produtos ORDER BY nome ASC")
+    cursor.execute("SELECT id, tipo, sabor, preco, estoque FROM produtos ORDER BY tipo ASC")
     produtos = cursor.fetchall()
     conn.close()
     return produtos
 
-def atualizar_produto(id_produto, nome, tipo, sabor, preco):
+def atualizar_produto(id_produto, tipo, sabor, preco, estoque=0):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE produtos
-        SET nome=?, tipo=?, sabor=?, preco=?
+        SET tipo=?, sabor=?, preco=?, estoque=?
         WHERE id=?
-    """, (nome, tipo, sabor, preco, id_produto))
+    """, (tipo, sabor, float(preco), int(estoque), id_produto))
     conn.commit()
     conn.close()
 

@@ -1,140 +1,173 @@
-import sys
+# ui/produtos_ui.py
 import os
+import sys
+
+# Garante que a raiz do projeto esteja no sys.path
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from tkinter import messagebox
-from tkinter import StringVar, DoubleVar, IntVar
+from tkinter import messagebox, StringVar, DoubleVar, IntVar
 
-# Ajusta o caminho para importar o model corretamente
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models.produto_model import ProdutoModel
+from models.produto_model import (
+    criar_tabela_produtos,
+    inserir_produto,
+    listar_produtos,
+    atualizar_produto,
+    excluir_produto
+)
 
 
 class ProdutosUI(ttk.Window):
-    def __init__(self, display_name, role):
+    def __init__(self, display_name="Admin", role="admin"):
         super().__init__(themename="superhero")
-        self.title("📦 Cadastro de Produtos - Açaiteria o Sabor da Fruta")
-        self.geometry("750x500")
+        self.title("📦 Cadastro de Produtos - Açaiteria")
+        self.geometry("820x540")
 
+        # inicializa tabela no banco (se necessário)
+        criar_tabela_produtos()
+
+        # variáveis
         self.display_name = display_name
         self.role = role
-
-        self.model = ProdutoModel()
-
-        # Variáveis de entrada
-        
-        self.tipo_var = StringVar()
-        self.preco_var = DoubleVar()
-        self.estoque_var = IntVar()
-
-        # Seleção da tabela
         self.selected_id = None
+        self.nome_tipo = StringVar()
+        self.sabor = StringVar()
+        self.preco = StringVar()   # usaremos string para validação
+        self.estoque = StringVar()
 
         self._build_ui()
         self._carregar_produtos()
 
     def _build_ui(self):
-        ttk.Label(
-            self,
-            text="📦 Gerenciamento de Produtos",
-            font=("Segoe UI", 16, "bold")
-        ).pack(pady=10)
+        header = ttk.Label(self, text="Gerenciamento de Produtos", font=("Segoe UI", 16, "bold"))
+        header.pack(pady=10)
 
-        form_frame = ttk.Frame(self, padding=10)
-        form_frame.pack(fill=X, pady=10)
+        frm = ttk.Frame(self)
+        frm.pack(fill=X, padx=12)
 
-        # Campos do formulário
-        
-        ttk.Label(form_frame, text="Tipo:").grid(row=1, column=0, sticky=W, padx=5, pady=5)
-        ttk.Combobox(form_frame, textvariable=self.tipo_var,
-                     values=["Picolé", "Sorvete"], state="readonly", width=27).grid(row=1, column=1, pady=5)
+        ttk.Label(frm, text="Tipo:").grid(row=0, column=0, sticky=W, padx=6, pady=6)
+        ttk.Combobox(frm, textvariable=self.nome_tipo, values=["Picolé", "Sorvete", "Copo 300ml", "Outros"], width=30).grid(row=0, column=1, sticky=W)
 
-        ttk.Label(form_frame, text="Preço (R$):").grid(row=0, column=2, sticky=W, padx=5, pady=5)
-        ttk.Entry(form_frame, textvariable=self.preco_var, width=10).grid(row=0, column=3, pady=5)
+        ttk.Label(frm, text="Sabor:").grid(row=1, column=0, sticky=W, padx=6, pady=6)
+        ttk.Entry(frm, textvariable=self.sabor, width=32).grid(row=1, column=1, sticky=W)
 
-        ttk.Label(form_frame, text="Estoque:").grid(row=1, column=2, sticky=W, padx=5, pady=5)
-        ttk.Entry(form_frame, textvariable=self.estoque_var, width=10).grid(row=1, column=3, pady=5)
+        ttk.Label(frm, text="Preço (R$):").grid(row=0, column=2, sticky=W, padx=6, pady=6)
+        ttk.Entry(frm, textvariable=self.preco, width=12).grid(row=0, column=3, sticky=W)
 
-        # Botões de ação
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(pady=10)
+        ttk.Label(frm, text="Estoque:").grid(row=1, column=2, sticky=W, padx=6, pady=6)
+        ttk.Entry(frm, textvariable=self.estoque, width=12).grid(row=1, column=3, sticky=W)
 
-        ttk.Button(btn_frame, text="💾 Salvar", bootstyle=SUCCESS, command=self.salvar_produto).grid(row=0, column=0, padx=5)
-        ttk.Button(btn_frame, text="✏️ Editar", bootstyle=INFO, command=self.editar_produto).grid(row=0, column=1, padx=5)
-        ttk.Button(btn_frame, text="🗑️ Excluir", bootstyle=DANGER, command=self.excluir_produto).grid(row=0, column=2, padx=5)
-        ttk.Button(btn_frame, text="↩️ Voltar", bootstyle=SECONDARY, command=self.voltar_dashboard).grid(row=0, column=3, padx=5)
+        btns = ttk.Frame(self)
+        btns.pack(fill=X, pady=8, padx=12)
+        ttk.Button(btns, text="💾 Salvar", bootstyle=SUCCESS, command=self.salvar_produto).pack(side=LEFT, padx=6)
+        ttk.Button(btns, text="✏️ Editar", bootstyle=INFO, command=self.iniciar_edicao).pack(side=LEFT, padx=6)
+        ttk.Button(btns, text="🗑️ Excluir", bootstyle=DANGER, command=self.excluir_produto).pack(side=LEFT, padx=6)
+        ttk.Button(btns, text="🔙 Voltar", bootstyle=SECONDARY, command=self.voltar_dashboard).pack(side=RIGHT, padx=6)
 
-        # Tabela de produtos
-        self.tree = ttk.Treeview(self, columns=("ID", "Tipo", "Preço", "Estoque"), show="headings", height=12)
-        self.tree.pack(fill=BOTH, expand=True, padx=10, pady=10)
+        table_frame = ttk.Frame(self)
+        table_frame.pack(fill=BOTH, expand=True, padx=12, pady=8)
 
-        for col in ("ID", "Tipo", "Preço", "Estoque"):
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=100, anchor=CENTER)
+        cols = ("ID", "Tipo", "Sabor", "Preço", "Estoque")
+        self.tree = ttk.Treeview(table_frame, columns=cols, show="headings")
+        for c in cols:
+            self.tree.heading(c, text=c)
+            self.tree.column(c, anchor=CENTER, width=120 if c == "ID" else 160)
+        self.tree.pack(fill=BOTH, expand=True, side=LEFT)
 
-        self.tree.bind("<ButtonRelease-1>", self._selecionar_item)
+        self.tree.bind("<ButtonRelease-1>", self._on_select)
 
-    # ====== FUNÇÕES ======
+        # scrollbar
+        sb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=sb.set)
+        sb.pack(side=RIGHT, fill=Y)
 
     def _carregar_produtos(self):
+        # limpa tabela
         for i in self.tree.get_children():
             self.tree.delete(i)
-        produtos = self.model.listar_produtos()
-        for p in produtos:
-            self.tree.insert("", "end", values=p)
+        try:
+            for p in listar_produtos():
+                # p: (id, tipo, sabor, preco, estoque)
+                preco_fmt = f"{float(p[3]):.2f}".replace(".", ",")
+                self.tree.insert("", "end", values=(p[0], p[1], p[2], preco_fmt, p[4]))
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao carregar produtos: {e}")
 
-    def _selecionar_item(self, event):
-        item = self.tree.focus()
-        if item:
-            valores = self.tree.item(item, "values")
-            self.selected_id = valores[0]
-            self.tipo_var.set(valores[2])
-            self.preco_var.set(valores[3])
-            self.estoque_var.set(valores[4])
+    def _on_select(self, event=None):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        vals = self.tree.item(sel[0])["values"]
+        self.selected_id = vals[0]
+        self.nome_tipo.set(vals[1])
+        self.sabor.set(vals[2])
+        # preço no tree vem com vírgula, converte para ponto
+        preco_str = str(vals[3]).replace(",", ".")
+        self.preco.set(preco_str)
+        self.estoque.set(str(vals[4]))
 
     def salvar_produto(self):
-        tipo = self.tipo_var.get().strip()
-        preco = self.preco_var.get()
-        estoque = self.estoque_var.get()
+        tipo = self.nome_tipo.get().strip()
+        sabor = self.sabor.get().strip()
+        preco = self.preco.get().strip().replace(",", ".")
+        estoque = self.estoque.get().strip() or "0"
 
-        if self.selected_id:
-            self.model.atualizar_produto(self.selected_id, tipo, preco, estoque)
-            messagebox.showinfo("Atualizado", "Produto atualizado com sucesso!")
-        else:
-            self.model.inserir_produto(tipo, preco, estoque)
-            messagebox.showinfo("Cadastrado", "Produto adicionado com sucesso!")
-
-        self._limpar_campos()
-        self._carregar_produtos()
-
-    def editar_produto(self):
-        if not self.selected_id:
-            messagebox.showwarning("Seleção", "Selecione um produto para editar.")
+        # validação
+        if not tipo or not sabor or not preco:
+            messagebox.showwarning("Validação", "Preencha Tipo, Sabor e Preço.")
             return
-        messagebox.showinfo("Edição", "Edite os campos e clique em 'Salvar' para confirmar.")
+        try:
+            preco_val = float(preco)
+            estoque_val = int(estoque)
+        except ValueError:
+            messagebox.showwarning("Validação", "Preço deve ser numérico e estoque inteiro.")
+            return
+
+        try:
+            if self.selected_id:
+                atualizar_produto(self.selected_id, tipo, sabor, preco_val, estoque_val)
+                messagebox.showinfo("Sucesso", "Produto atualizado.")
+            else:
+                inserir_produto(tipo, sabor, preco_val, estoque_val)
+                messagebox.showinfo("Sucesso", "Produto cadastrado.")
+            self._limpar_campos()
+            self._carregar_produtos()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao salvar: {e}")
+
+    def iniciar_edicao(self):
+        if not self.selected_id:
+            messagebox.showwarning("Seleção", "Selecione um produto na lista para editar.")
+            return
+        messagebox.showinfo("Editar", "Altere os campos e clique em Salvar para confirmar a edição.")
 
     def excluir_produto(self):
         if not self.selected_id:
             messagebox.showwarning("Seleção", "Selecione um produto para excluir.")
             return
-        confirm = messagebox.askyesno("Confirmação", "Deseja realmente excluir este produto?")
-        if confirm:
-            self.model.excluir_produto(self.selected_id)
-            self._carregar_produtos()
-            self._limpar_campos()
-            messagebox.showinfo("Excluído", "Produto removido com sucesso!")
+        if messagebox.askyesno("Confirmar", "Deseja excluir o produto selecionado?"):
+            try:
+                excluir_produto(self.selected_id)
+                messagebox.showinfo("Sucesso", "Produto excluído.")
+                self._limpar_campos()
+                self._carregar_produtos()
+            except Exception as e:
+                messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
     def _limpar_campos(self):
-        
-        self.tipo_var.set("")
-        self.preco_var.set(0.0)
-        self.estoque_var.set(0)
         self.selected_id = None
+        self.nome_tipo.set("")
+        self.sabor.set("")
+        self.preco.set("")
+        self.estoque.set("")
 
     def voltar_dashboard(self):
+        # fecha e chama dashboard com subprocess para preservar fluxo atual do seu app
         self.destroy()
-        os.system(f"{sys.executable} ui/dashboard_ui.py {self.display_name} {self.role}")
+        os.system(f'"{sys.executable}" ui/dashboard_ui.py "{self.display_name}" "{self.role}"')
 
 
 if __name__ == "__main__":
