@@ -1,6 +1,7 @@
 # ui/produtos_ui.py
 import os
 import sys
+import subprocess
 
 # Garante que a raiz do projeto esteja no sys.path
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -165,9 +166,15 @@ class ProdutosUI(ttk.Window):
         self.estoque.set("")
 
     def voltar_dashboard(self):
-        # fecha e chama dashboard com subprocess para preservar fluxo atual do seu app
+        # chama o dashboard em um processo separado e fecha esta janela
+        dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
+        try:
+            subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
+        except Exception:
+            # fallback simples caso Popen falhe, tenta chamar via os.system
+            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"')
+        # fecha apenas esta janela; o novo processo continua rodando
         self.destroy()
-        os.system(f'"{sys.executable}" ui/dashboard_ui.py "{self.display_name}" "{self.role}"')
 
 
 if __name__ == "__main__":
