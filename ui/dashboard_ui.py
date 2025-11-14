@@ -9,6 +9,13 @@ from tkinter import messagebox
 # Garante que os módulos sejam encontrados mesmo quando executados via subprocess
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Importa a janela de Vendas para abrir como Toplevel no mesmo processo
+try:
+    from ui.vendas_ui import VendasUI
+except Exception:
+    # import no topo pode falhar em alguns cenários; faremos import local na função se necessário
+    VendasUI = None
+
 class DashboardUI(ttk.Window):
     def __init__(self, display_name, role):
         super().__init__(themename="superhero")
@@ -56,9 +63,36 @@ class DashboardUI(ttk.Window):
     # ==== AÇÕES DO MENU ====
 
     def abrir_vendas(self):
-        self.destroy()
-        subprocess.Popen([sys.executable, "ui/vendas_ui.py",
-                          self.display_name, self.role])
+        try:
+            # importa localmente se necessário
+            if VendasUI is None:
+                from ui.vendas_ui import VendasUI
+
+            # oculta o dashboard enquanto a janela de vendas estiver aberta
+            self.withdraw()
+
+            vendas_win = VendasUI(master=self, operador=self.display_name, role=self.role)
+            vendas_win.transient(self)   # janela filha
+            vendas_win.grab_set()        # concentra eventos na janela de vendas
+
+            def _on_vendas_close():
+                try:
+                    vendas_win.grab_release()
+                    vendas_win.destroy()
+                finally:
+                    self.deiconify()
+
+            vendas_win.protocol("WM_DELETE_WINDOW", _on_vendas_close)
+            # aguarda fechamento da janela filha sem criar outro mainloop
+            self.wait_window(vendas_win)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível abrir Vendas: {e}")
+            # fallback: abrir como subprocess (menos recomendado)
+            try:
+                subprocess.Popen([sys.executable, "ui/vendas_ui.py", self.display_name, self.role])
+                self.destroy()
+            except Exception:
+                pass
 
     def abrir_produtos(self):
         """Abre o módulo de produtos sem quebrar o contexto da janela."""
