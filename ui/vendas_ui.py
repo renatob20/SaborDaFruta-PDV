@@ -1,51 +1,48 @@
-# ui/vendas_ui.py
+# ---------- PARTE A: imports, helpers, ensure_tables ----------
 import os
 import sys
 import sqlite3
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
+
+# GUI
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from tkinter import messagebox, StringVar, DoubleVar, IntVar
+from tkinter import messagebox, StringVar
 
 # garante que imports relativos funcionem quando executado diretamente
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-# try importar get_connection a partir do seu módulo database/db.py
-try:
-    from database.db import get_connection
-except Exception:
-    # fallback simples
-    def get_connection():
-        db_path = os.path.join("database", "acaiteria.db")
-        if not os.path.exists("database"):
-            os.makedirs("database")
-        return sqlite3.connect(db_path)
-
+# use a função de conexão do módulo de products (mesmo DB_PATH)
+from database.products_db import get_connection
 
 # ----------------- Helpers -----------------
 def brl_format(value):
-    """Formata float -> '0,00' (BRL style)."""
+    """Formata float/Decimal -> '1.234,56' (BRL style)."""
     try:
-        return f"{float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except Exception:
-        return "0,00"
+        v = Decimal(value)
+    except (InvalidOperation, TypeError):
+        v = Decimal("0.00")
+    s = f"{v:,.2f}"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return s
 
-
-def to_float_from_brl(text):
-    """Converte '1.234,56' ou '1234.56' ou '1234,56' -> float"""
-    if text is None or text == "":
+def parse_brl_to_float(text):
+    """Converte '1.234,56' ou '1234.56' ou '1234,56' -> float (safe)."""
+    if text is None:
         return 0.0
     t = str(text).strip()
+    if t == "":
+        return 0.0
     t = t.replace(".", "").replace(",", ".")
     try:
         return float(t)
     except Exception:
         return 0.0
 
-
-# ----------------- DB init (garante tabelas) -----------------
+# ----------------- DB init (garante tabelas essenciais para vendas) -----------------
 def ensure_tables():
     conn = get_connection()
     cur = conn.cursor()
@@ -76,156 +73,163 @@ def ensure_tables():
     """)
     conn.commit()
     conn.close()
-
-
-# ----------------- UI: VendasUI -----------------
+# ---------- Fim PARTE A ----------
+# ---------- PARTE B: UI builder (layout) ----------
 class VendasUI(ttk.Window):
     def __init__(self, master=None, operador="Operador", role="operador"):
-        # usa tema padronizado
         super().__init__(themename="superhero")
         self.master = master
         self.operador = operador
         self.role = role
 
-        # maximiza a janela ao abrir
+        # tenta abrir maximizado se possível
         try:
             self.state("zoomed")
         except Exception:
-            pass
+            try:
+                self.attributes("-zoomed", True)
+            except Exception:
+                pass
 
-        self.title(f"Vendas - Operador: {self.operador}")
-        self.minsize(900, 560)
+        self.title(f"📋 Vendas - {self.operador}")
+        self.minsize(1000, 640)
 
         # dados
-        self.produtos = []          # tuplas: (id, tipo, sabor, preco, estoque)
-        self.produtos_cache = {}    # label -> (id, tipo, sabor, preco)
-        self.carrinho = []          # lista de dicts de itens
+        self.produtos = []          # lista de rows (id, nome, tipo, sabor, preco, estoque)
+        self.produtos_cache = {}    # chave exibida -> dict {id,nome,tipo,sabor,preco,estoque}
+        self.carrinho = []          # lista de itens dict
         self.total = 0.0
 
-        # garantir tabelas
+        # garante tabelas relacionadas a vendas
         ensure_tables()
 
+        # UI
         self._build_ui()
-        self._carregar_tipos()      # popula tipos e depois sabores
-        self._carregar_vendas_recentes()
+        self._load_produtos()            # carrega produtos para os combos
+        self._carregar_vendas_recentes() # lista ultimas vendas
 
-    # ---------------- UI builder ----------------
     def _build_ui(self):
-        # Header
-        header = ttk.Frame(self, padding=10)
-        header.pack(fill=X)
+        container = ttk.Frame(self, padding=10)
+        container.pack(fill="both", expand=True)
+
+        # header
+        header = ttk.Frame(container)
+        header.pack(fill=X, pady=(0, 8))
         ttk.Label(header, text="Registrar Venda", font=("Segoe UI", 16, "bold")).pack(side=LEFT)
         ttk.Label(header, text=f"Operador: {self.operador}", font=("Segoe UI", 10)).pack(side=RIGHT)
 
-        main = ttk.Frame(self, padding=10)
+        main = ttk.Frame(container)
         main.pack(fill=BOTH, expand=True)
 
-        # left: seleção + carrinho
+        # left main area (selection + carrinho)
         left = ttk.Frame(main)
-        left.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))
+        left.pack(side=LEFT, fill=BOTH, expand=True, padx=(0,8))
 
-        # -> Seletor tipo e sabor
-        frm_sel = ttk.Labelframe(left, text="Adicionar item", padding=10)
-        frm_sel.pack(fill=X, pady=4)
+        # selection frame
+        sel_frame = ttk.Labelframe(left, text="Adicionar Item", padding=8)
+        sel_frame.pack(fill=X)
 
-        ttk.Label(frm_sel, text="Tipo:").grid(row=0, column=0, sticky=W, padx=6, pady=6)
-        self.tipo_cb = ttk.Combobox(frm_sel, state="readonly", width=30)
+        # Tipo
+        ttk.Label(sel_frame, text="Tipo:").grid(row=0, column=0, sticky=W, padx=6, pady=6)
+        self.tipo_cb = ttk.Combobox(sel_frame, values=[], state="readonly", width=30)
         self.tipo_cb.grid(row=0, column=1, sticky=W, padx=6)
+        # evento: ao mudar o tipo carregamos apenas produtos desse tipo
         self.tipo_cb.bind("<<ComboboxSelected>>", lambda e: self._on_tipo_selected())
 
-        ttk.Label(frm_sel, text="Sabor / Produto:").grid(row=1, column=0, sticky=W, padx=6, pady=6)
-        self.sabor_cb = ttk.Combobox(frm_sel, state="readonly", width=50)
-        self.sabor_cb.grid(row=1, column=1, sticky=W, padx=6)
-        self.sabor_cb.bind("<<ComboboxSelected>>", lambda e: self._on_sabor_selected())
+        # Produto (exibe apenas o nome, sem preço)
+        ttk.Label(sel_frame, text="Produto:").grid(row=1, column=0, sticky=W, padx=6, pady=6)
+        self.produto_cb = ttk.Combobox(sel_frame, values=[], state="readonly", width=50)
+        self.produto_cb.grid(row=1, column=1, sticky=W, padx=6)
+        self.produto_cb.bind("<<ComboboxSelected>>", lambda e: self._on_produto_selected())
 
-        # tipo / unidade label
-        ttk.Label(frm_sel, text="Tipo/Unidade:").grid(row=2, column=0, sticky=W, padx=6, pady=6)
-        self.tipo_label = ttk.Label(frm_sel, text="-")
-        self.tipo_label.grid(row=2, column=1, sticky=W, padx=6)
+        # quantidade
+        ttk.Label(sel_frame, text="Qtd (unid):").grid(row=2, column=0, sticky=W, padx=6, pady=6)
+        self.qtd_var = StringVar()
+        self.qtd_entry = ttk.Entry(sel_frame, textvariable=self.qtd_var, width=12)
+        self.qtd_entry.grid(row=2, column=1, sticky=W, padx=6)
 
-        # qtd / peso
-        ttk.Label(frm_sel, text="Qtd (unid):").grid(row=3, column=0, sticky=W, padx=6, pady=6)
-        self.qtd_var = StringVar(value="")
-        self.qtd_ent = ttk.Entry(frm_sel, textvariable=self.qtd_var, width=12)
-        self.qtd_ent.grid(row=3, column=1, sticky=W, padx=6)
+        # peso (kg)
+        ttk.Label(sel_frame, text="Peso (kg):").grid(row=3, column=0, sticky=W, padx=6, pady=6)
+        self.peso_var = StringVar()
+        self.peso_entry = ttk.Entry(sel_frame, textvariable=self.peso_var, width=12, state="disabled")
+        self.peso_entry.grid(row=3, column=1, sticky=W, padx=6)
 
-        ttk.Label(frm_sel, text="Peso (kg):").grid(row=4, column=0, sticky=W, padx=6, pady=6)
-        self.peso_var = StringVar(value="")
-        self.peso_ent = ttk.Entry(frm_sel, textvariable=self.peso_var, width=12, state="disabled")
-        self.peso_ent.grid(row=4, column=1, sticky=W, padx=6)
+        # valor unitario (readonly, pequeno) - visível mas não editável (vai puxar do DB)
+        ttk.Label(sel_frame, text="Valor Unit (R$):").grid(row=4, column=0, sticky=W, padx=6, pady=6)
+        self.valor_unit_var = StringVar(value=brl_format(0.0))
+        self.valor_unit_entry = ttk.Entry(sel_frame, textvariable=self.valor_unit_var, width=14, state="readonly")
+        self.valor_unit_entry.grid(row=4, column=1, sticky=W, padx=6)
 
-        # valor unitário (oculto visualmente? deixamos readonly e pequeno)
-        ttk.Label(frm_sel, text="Valor Unitário (R$):").grid(row=5, column=0, sticky=W, padx=6, pady=6)
-        self.valor_unit_var = StringVar(value="0,00")
-        self.valor_unit_ent = ttk.Entry(frm_sel, textvariable=self.valor_unit_var, width=14, state="readonly")
-        self.valor_unit_ent.grid(row=5, column=1, sticky=W, padx=6)
+        # adicionar
+        ttk.Button(sel_frame, text="➕ Adicionar ao carrinho", bootstyle=SUCCESS, command=self.adicionar_ao_carrinho)\
+            .grid(row=5, column=0, columnspan=2, pady=10)
 
-        ttk.Button(frm_sel, text="➕ Adicionar ao carrinho", bootstyle=SUCCESS, command=self.adicionar_ao_carrinho).grid(row=6, column=0, columnspan=2, pady=10)
+        # carrinho frame
+        cart_frame = ttk.Labelframe(left, text="Carrinho", padding=8)
+        cart_frame.pack(fill=BOTH, expand=True, pady=(8,0))
 
-        # Carrinho Treeview
-        cart_frame = ttk.Labelframe(left, text="Carrinho", padding=6)
-        cart_frame.pack(fill=BOTH, expand=True, pady=6)
-
-        cols = ("id", "produto", "tipo", "qtd", "peso_kg", "valor_unit", "subtotal")
+        cols = ("idx", "produto", "tipo", "qtd", "peso_kg", "unit", "subtotal")
         self.tree_cart = ttk.Treeview(cart_frame, columns=cols, show="headings", selectmode="browse")
         headings = {
-            "id": "ID",
+            "idx": "ID",
             "produto": "Produto",
             "tipo": "Tipo",
             "qtd": "Qtd",
-            "peso_kg": "Peso (kg)",
-            "valor_unit": "R$/Unid",
+            "peso_kg": "Peso(kg)",
+            "unit": "R$/Unid",
             "subtotal": "Subtotal"
         }
         for c in cols:
             self.tree_cart.heading(c, text=headings[c], anchor="center")
-            self.tree_cart.column(c, anchor="center", width=100 if c in ("id","qtd") else 160)
+            w = 60 if c == "idx" else 140
+            self.tree_cart.column(c, anchor="center", width=w)
         self.tree_cart.pack(fill=BOTH, expand=True, side=LEFT)
-
         sb = ttk.Scrollbar(cart_frame, orient="vertical", command=self.tree_cart.yview)
         self.tree_cart.configure(yscroll=sb.set)
         sb.pack(side=RIGHT, fill=Y)
 
-        # ações carrinho
+        # ações do carrinho
         cart_actions = ttk.Frame(left)
-        cart_actions.pack(fill=X, pady=6)
+        cart_actions.pack(fill=X, pady=8)
         ttk.Button(cart_actions, text="✏️ Editar item", command=self.editar_item).pack(side=LEFT, padx=6)
         ttk.Button(cart_actions, text="🗑️ Remover item", bootstyle=DANGER, command=self.remover_item).pack(side=LEFT, padx=6)
         ttk.Button(cart_actions, text="🔄 Limpar carrinho", bootstyle=SECONDARY, command=self.limpar_carrinho).pack(side=RIGHT, padx=6)
 
-        # right: resumo + últimas vendas
-        right = ttk.Frame(main, width=340)
+        # right side: resumo + últimas vendas
+        right = ttk.Frame(main, width=360)
         right.pack(side=RIGHT, fill=Y)
 
-        resumo = ttk.Labelframe(right, text="Resumo da Venda", padding=10)
-        resumo.pack(fill=X, pady=6)
+        resumo = ttk.Labelframe(right, text="Resumo da Venda", padding=8)
+        resumo.pack(fill=X)
 
-        ttk.Label(resumo, text="Total (R$):").grid(row=0, column=0, sticky=W, pady=6)
+        ttk.Label(resumo, text="Total (R$):").grid(row=0, column=0, sticky=W, padx=6, pady=6)
         self.total_var = StringVar(value=brl_format(0.0))
-        self.total_ent = ttk.Entry(resumo, textvariable=self.total_var, state="readonly", width=18)
-        self.total_ent.grid(row=0, column=1, padx=6)
+        self.total_entry = ttk.Entry(resumo, textvariable=self.total_var, width=20, state="readonly")
+        self.total_entry.grid(row=0, column=1, padx=6)
 
-        ttk.Label(resumo, text="Forma de Pagamento:").grid(row=1, column=0, sticky=W, pady=6)
+        ttk.Label(resumo, text="Forma de Pagamento:").grid(row=1, column=0, sticky=W, padx=6, pady=6)
         self.forma_cb = ttk.Combobox(resumo, values=["Pix", "Crédito", "Débito", "Dinheiro"], state="readonly", width=16)
         self.forma_cb.grid(row=1, column=1, padx=6)
         self.forma_cb.bind("<<ComboboxSelected>>", lambda e: self._on_forma_change())
 
-        ttk.Label(resumo, text="Valor Recebido (R$):").grid(row=2, column=0, sticky=W, pady=6)
+        ttk.Label(resumo, text="Valor Recebido (R$):").grid(row=2, column=0, sticky=W, padx=6, pady=6)
         self.recebido_var = StringVar(value=brl_format(0.0))
-        self.recebido_ent = ttk.Entry(resumo, textvariable=self.recebido_var, width=18, state="disabled")
-        self.recebido_ent.grid(row=2, column=1, padx=6)
-        self.recebido_ent.bind("<KeyRelease>", lambda e: self._atualizar_troco())
+        # Recebido sempre habilitado (como solicitado)
+        self.recebido_entry = ttk.Entry(resumo, textvariable=self.recebido_var, width=20)
+        self.recebido_entry.grid(row=2, column=1, padx=6)
+        self.recebido_entry.bind("<KeyRelease>", lambda e: self._atualizar_troco())
 
-        ttk.Label(resumo, text="Troco (R$):").grid(row=3, column=0, sticky=W, pady=6)
+        ttk.Label(resumo, text="Troco (R$):").grid(row=3, column=0, sticky=W, padx=6, pady=6)
         self.troco_var = StringVar(value=brl_format(0.0))
-        self.troco_ent = ttk.Entry(resumo, textvariable=self.troco_var, state="readonly", width=18)
-        self.troco_ent.grid(row=3, column=1, padx=6)
+        self.troco_entry = ttk.Entry(resumo, textvariable=self.troco_var, width=20, state="readonly")
+        self.troco_entry.grid(row=3, column=1, padx=6)
 
         ttk.Button(resumo, text="✔️ Finalizar Venda", bootstyle=SUCCESS, command=self.finalizar_venda).grid(row=4, column=0, columnspan=2, pady=12)
+        ttk.Button(resumo, text="🔙 Sair", bootstyle=INFO, command=self.voltar_dashboard).grid(row=5, column=0, columnspan=2)
 
         # últimas vendas
         recent = ttk.Labelframe(right, text="Últimas Vendas", padding=8)
-        recent.pack(fill=BOTH, expand=True, pady=6)
+        recent.pack(fill=BOTH, expand=True, pady=8)
         self.tree_recent = ttk.Treeview(recent, columns=("id","data","total","operador"), show="headings", height=8)
         self.tree_recent.heading("id", text="ID", anchor="center")
         self.tree_recent.heading("data", text="Data", anchor="center")
@@ -236,95 +240,137 @@ class VendasUI(ttk.Window):
         self.tree_recent.column("total", width=90, anchor="center")
         self.tree_recent.column("operador", width=100, anchor="center")
         self.tree_recent.pack(fill=BOTH, expand=True)
-
-    # ---------------- carregar tipos (distinct) ----------------
-    def _carregar_tipos(self):
+# ---------- Fim PARTE B ----------
+# ---------- PARTE C: lógica (carregamento, carrinho, finalização, voltar) ----------
+    # ---------------- carregamento de produtos ----------
+    def _load_produtos(self):
+        """
+        Carrega todos os produtos e popula:
+          - self.produtos (lista de rows)
+          - self.tipo_cb com os tipos distintos (campo 'tipo' da tabela)
+        Observação: não preenche produto_cb aqui — produto_cb é preenchido ao selecionar um tipo.
+        """
         try:
             conn = get_connection()
             cur = conn.cursor()
-            cur.execute("SELECT DISTINCT tipo FROM produtos ORDER BY tipo ASC")
-            tipos = [r[0] for r in cur.fetchall()]
-            conn.close()
-            self.tipo_cb['values'] = tipos
-            # também carrega cache completo de produtos para facilitar buscas
-            self._carregar_todos_produtos_cache()
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao carregar tipos: {e}")
-
-    def _carregar_todos_produtos_cache(self):
-        try:
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT id, tipo, sabor, preco, estoque FROM produtos")
+            cur.execute("SELECT id, nome, tipo, sabor, preco, estoque FROM produtos ORDER BY tipo, nome")
             rows = cur.fetchall()
             conn.close()
             self.produtos = rows
-        except Exception:
-            self.produtos = []
 
-    # ---------------- quando seleciona tipo -> carrega sabores correspondentes
-    def _on_tipo_selected(self):
-        tipo = self.tipo_cb.get()
-        if not tipo:
-            return
-        try:
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT id, sabor, preco FROM produtos WHERE tipo=? ORDER BY sabor", (tipo,))
-            rows = cur.fetchall()
-            conn.close()
-            display = []
+            # Tipos distintos vindos diretamente do resultado (garante correspondência com o DB)
+            tipos = sorted({r[2] for r in rows if r[2]})
+            self.tipo_cb['values'] = tipos
+
+            # Monta cache indexado por uma chave única (nome ou nome (id:X) caso haja duplicatas)
             self.produtos_cache.clear()
+            name_count = {}
             for r in rows:
-                pid, sabor, preco = r
-                label = f"{sabor} — R$ {float(preco):.2f}"
-                display.append(label)
-                self.produtos_cache[label] = (pid, tipo, sabor, float(preco))
-            self.sabor_cb['values'] = display
-            # ativa campos conforme o tipo
-            if tipo.lower() == "sorvete":
-                self.peso_ent.config(state="normal")
-                self.qtd_ent.config(state="disabled")
-            else:
-                self.peso_ent.config(state="disabled")
-                self.qtd_ent.config(state="normal")
-            # limpa seleção anterior
-            self.sabor_cb.set("")
-            self.valor_unit_var.set(brl_format(0.0))
+                pid, nome, tipo, sabor, preco, estoque = r
+                base = nome or f"produto_{pid}"
+                # se houver nomes repetidos, criamos chave única com id
+                count = name_count.get(base, 0)
+                name_count[base] = count + 1
+                key = base if count == 0 else f"{base} (id:{pid})"
+                self.produtos_cache[key] = {
+                    "id": pid,
+                    "nome": nome,
+                    "tipo": tipo,
+                    "sabor": sabor,
+                    "preco": float(preco or 0.0),
+                    "estoque": estoque
+                }
+
+            # limpa seleção atual (produto_cb será preenchido quando o tipo for escolhido)
+            self.produto_cb.set("")
+            self.produto_cb['values'] = []
         except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao carregar sabores: {e}")
+            messagebox.showerror("Erro", f"Falha ao carregar produtos: {e}")
 
-    # ---------------- quando seleciona sabor -> atualiza preço
-    def _on_sabor_selected(self):
-        sel = self.sabor_cb.get()
-        if sel and sel in self.produtos_cache:
-            _, tipo, sabor, preco = self.produtos_cache[sel]
-            self.tipo_label.config(text=tipo)
-            self.valor_unit_var.set(brl_format(preco))
-            # habilita campo correto
-            if tipo.lower() == "sorvete":
-                self.peso_ent.config(state="normal")
-                self.qtd_ent.config(state="disabled")
-            else:
-                self.peso_ent.config(state="disabled")
-                self.qtd_ent.config(state="normal")
+    # ---------------- evento tipo selecionado ----------------
+    def _on_tipo_selected(self):
+        tipo = self.tipo_cb.get().strip()
+        if not tipo:
+            # limpa produto combo
+            self.produto_cb.set("")
+            self.produto_cb['values'] = []
+            return
+
+        # FILTRA produtos no cache por campo 'tipo' (garante que vem do DB)
+        values = []
+        for key, info in self.produtos_cache.items():
+            if (info.get('tipo') or "").strip() == tipo:
+                values.append(key)
+
+        # ordena alfabeticamente para melhor UX
+        values = sorted(values, key=lambda k: self.produtos_cache[k]['nome'].lower())
+
+        self.produto_cb['values'] = values
+
+        # habilita/desabilita campos qtd/peso conforme tipo (SORVETE usa peso)
+        if tipo.lower() == "sorvete":
+            self.peso_entry.config(state="normal")
+            self.qtd_entry.config(state="disabled")
+            self.qtd_var.set("")
         else:
+            self.peso_entry.config(state="disabled")
+            self.peso_var.set("")
+            self.qtd_entry.config(state="normal")
+
+        # auto selecionar o primeiro produto disponível (opcional)
+        if values:
+            self.produto_cb.current(0)
+            self._on_produto_selected()
+        else:
+            self.produto_cb.set("")
             self.valor_unit_var.set(brl_format(0.0))
 
-    # ---------------- adicionar item ----------------
+    # ---------------- evento produto selecionado ----------------
+    def _on_produto_selected(self):
+        key = self.produto_cb.get()
+        if not key:
+            self.valor_unit_var.set(brl_format(0.0))
+            return
+
+        info = self.produtos_cache.get(key)
+        if not info:
+            # caso não encontre, tenta procurar por nome simples (compatibilidade)
+            info = next((v for v in self.produtos_cache.values() if v.get('nome') == key), None)
+            if not info:
+                self.valor_unit_var.set(brl_format(0.0))
+                return
+
+        preco = float(info.get("preco", 0.0))
+        self.valor_unit_var.set(brl_format(preco))
+
+        # se o produto é sorvete, habilita peso, senão qtd — (duplica segurança)
+        tipo = (info.get("tipo") or "").lower()
+        if tipo == "sorvete":
+            self.peso_entry.config(state="normal")
+            self.qtd_entry.config(state="disabled")
+            self.qtd_var.set("")
+        else:
+            self.peso_entry.config(state="disabled")
+            self.peso_var.set("")
+            self.qtd_entry.config(state="normal")
+
+    # ---------------- adicionar ao carrinho ----------------
     def adicionar_ao_carrinho(self):
-        sel = self.sabor_cb.get()
-        if not sel:
-            messagebox.showwarning("Atenção", "Selecione Tipo e Sabor/Produto.")
+        key = self.produto_cb.get()
+        if not key:
+            messagebox.showwarning("Atenção", "Selecione um produto.")
             return
-        prod_info = self.produtos_cache.get(sel)
-        if not prod_info:
-            messagebox.showerror("Erro", "Produto não encontrado.")
+        info = self.produtos_cache.get(key)
+        if not info:
+            messagebox.showerror("Erro", "Produto não encontrado no cache.")
             return
-        pid, tipo, sabor, preco = prod_info
+        tipo = info.get("tipo", "")
+        nome = info.get("nome")
+        pid = info.get("id")
+        preco = float(info.get("preco", 0.0))
 
         if tipo.lower() == "sorvete":
-            peso = to_float_from_brl(self.peso_var.get())
+            peso = parse_brl_to_float(self.peso_var.get())
             if peso <= 0:
                 messagebox.showwarning("Atenção", "Informe um peso válido (kg).")
                 return
@@ -343,12 +389,12 @@ class VendasUI(ttk.Window):
 
         item = {
             "produto_id": pid,
-            "produto_nome": sabor,
+            "produto_nome": nome,
             "tipo": tipo,
             "quantidade": quantidade,
             "peso_kg": peso,
-            "valor_unit": float(preco),
-            "subtotal": float(subtotal)
+            "valor_unit": preco,
+            "subtotal": subtotal
         }
         self.carrinho.append(item)
         self._refresh_carrinho()
@@ -361,26 +407,26 @@ class VendasUI(ttk.Window):
         # limpa tree
         for r in self.tree_cart.get_children():
             self.tree_cart.delete(r)
-        # preenche
+        # repopula
         for idx, it in enumerate(self.carrinho):
-            self.tree_cart.insert("", "end", iid=str(idx),
-                                  values=(
-                                      it["produto_id"],
-                                      it["produto_nome"],
-                                      it["tipo"],
-                                      it["quantidade"] if it["quantidade"] is not None else "",
-                                      f"{it['peso_kg']:.3f}" if it["peso_kg"] is not None else "",
-                                      brl_format(it["valor_unit"]),
-                                      brl_format(it["subtotal"])
-                                  ))
+            self.tree_cart.insert("", "end", iid=str(idx), values=(
+                idx + 1,
+                it["produto_nome"],
+                it["tipo"],
+                it["quantidade"] if it["quantidade"] is not None else "",
+                f"{it['peso_kg']:.3f}" if it["peso_kg"] is not None else "",
+                brl_format(it["valor_unit"]),
+                brl_format(it["subtotal"])
+            ))
 
     def _recalcular_total(self):
         total = sum(it["subtotal"] for it in self.carrinho)
         self.total = float(total)
         self.total_var.set(brl_format(self.total))
+        # atualiza troco automaticamente conforme recebido
         self._atualizar_troco()
 
-    # ---------------- editar / remover ----------------
+    # ---------------- editar / remover item ----------------
     def editar_item(self):
         sel = self.tree_cart.selection()
         if not sel:
@@ -388,15 +434,23 @@ class VendasUI(ttk.Window):
             return
         idx = int(sel[0])
         item = self.carrinho.pop(idx)
-        # pré-seleciona produto
-        display = next((k for k, v in self.produtos_cache.items() if v[2] == item["produto_nome"]), None)
-        if display:
-            self.sabor_cb.set(display)
-            self._on_sabor_selected()
-            if item["tipo"].lower() == "sorvete":
-                self.peso_var.set(str(item["peso_kg"] or ""))
-            else:
-                self.qtd_var.set(str(item["quantidade"] or ""))
+        # tenta selecionar produto correspondente no combo (busca por id)
+        key = next((k for k,v in self.produtos_cache.items() if v['id'] == item["produto_id"]), None)
+        if key:
+            self.produto_cb.set(key)
+            self._on_produto_selected()
+        # preenche campos
+        if item["tipo"].lower() == "sorvete":
+            self.peso_var.set(str(item["peso_kg"] or ""))
+            self.qtd_var.set("")
+            self.peso_entry.config(state="normal")
+            self.qtd_entry.config(state="disabled")
+        else:
+            self.qtd_var.set(str(item["quantidade"] or ""))
+            self.peso_var.set("")
+            self.qtd_entry.config(state="normal")
+            self.peso_entry.config(state="disabled")
+        # atualiza view
         self._refresh_carrinho()
         self._recalcular_total()
 
@@ -421,19 +475,23 @@ class VendasUI(ttk.Window):
     # ---------------- pagamento / troco ----------------
     def _on_forma_change(self):
         forma = self.forma_cb.get()
+        # Valor recebido ALWAYS enabled (requested). Troco only active for Dinheiro.
+        # Recebido já está sempre habilitado por design.
         if forma == "Dinheiro":
-            self.recebido_ent.config(state="normal")
-            # zera campo recebido para digitação
-            self.recebido_var.set(brl_format(0.0))
+            # troco é mostrado e será calculado automaticamente
+            self._atualizar_troco()
         else:
-            self.recebido_var.set(brl_format(0.0))
-            self.recebido_ent.config(state="disabled")
+            # other payments, troco stays 0
             self.troco_var.set(brl_format(0.0))
+            # _atualizar_troco() will keep troco 0 when forma != Dinheiro
 
     def _atualizar_troco(self):
         try:
-            recebido = to_float_from_brl(self.recebido_var.get())
-            troco = max(0.0, recebido - self.total)
+            recebido = parse_brl_to_float(self.recebido_var.get())
+            if self.forma_cb.get() == "Dinheiro":
+                troco = max(0.0, recebido - self.total)
+            else:
+                troco = 0.0
             self.troco_var.set(brl_format(troco))
         except Exception:
             self.troco_var.set(brl_format(0.0))
@@ -447,14 +505,12 @@ class VendasUI(ttk.Window):
         if not forma:
             messagebox.showwarning("Atenção", "Selecione forma de pagamento.")
             return
-
-        recebido = to_float_from_brl(self.recebido_var.get()) if self.forma_cb.get() == "Dinheiro" else None
-        troco = to_float_from_brl(self.troco_var.get()) if self.forma_cb.get() == "Dinheiro" else 0.0
-
-        if self.forma_cb.get() == "Dinheiro" and (recebido is None or recebido < self.total):
+        # parse recebido only if money, otherwise store None
+        recebido = parse_brl_to_float(self.recebido_var.get()) if forma == "Dinheiro" else None
+        troco = parse_brl_to_float(self.troco_var.get()) if forma == "Dinheiro" else 0.0
+        if forma == "Dinheiro" and (recebido is None or recebido < self.total):
             messagebox.showwarning("Atenção", "Valor recebido insuficiente.")
             return
-
         try:
             conn = get_connection()
             cur = conn.cursor()
@@ -463,7 +519,7 @@ class VendasUI(ttk.Window):
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), self.operador, self.total, forma, recebido, troco))
             venda_id = cur.lastrowid
-
+            # grava itens
             for it in self.carrinho:
                 cur.execute("""
                     INSERT INTO venda_items (venda_id, produto_id, produto_nome, tipo, quantidade, peso_kg, valor_unit, subtotal)
@@ -481,26 +537,23 @@ class VendasUI(ttk.Window):
                 # decrementa estoque se for unidade e existir coluna estoque
                 try:
                     if it.get("quantidade") is not None:
-                        conn2 = get_connection()
-                        c2 = conn2.cursor()
+                        c2 = conn.cursor()
                         c2.execute("SELECT estoque FROM produtos WHERE id=?", (it["produto_id"],))
                         row = c2.fetchone()
-                        if row:
+                        if row and row[0] is not None:
                             novo = max(0, int(row[0]) - int(it["quantidade"]))
                             c2.execute("UPDATE produtos SET estoque=? WHERE id=?", (novo, it["produto_id"]))
-                            conn2.commit()
-                        conn2.close()
                 except Exception:
                     pass
-
             conn.commit()
             conn.close()
 
-            messagebox.showinfo("Venda registrada", f"Venda ID {venda_id} registrada com sucesso!\nTotal: R$ {self.total:.2f}")
-            # limpa
+            messagebox.showinfo("Venda registrada", f"Venda ID {venda_id} registrada!\nTotal: R$ {self.total:.2f}")
+            # limpa tela
             self.carrinho.clear()
             self._refresh_carrinho()
             self._recalcular_total()
+            # reset pagamento
             self.forma_cb.set("")
             self.recebido_var.set(brl_format(0.0))
             self.troco_var.set(brl_format(0.0))
@@ -508,7 +561,7 @@ class VendasUI(ttk.Window):
         except sqlite3.Error as e:
             messagebox.showerror("Erro BD", f"Falha ao gravar venda: {e}")
 
-    # ---------------- carregar últimas vendas ----------------
+    # ---------------- carregar ultimas vendas ----------------
     def _carregar_vendas_recentes(self):
         try:
             conn = get_connection()
@@ -523,8 +576,37 @@ class VendasUI(ttk.Window):
         except Exception:
             pass
 
+    # ---------------- voltar ao dashboard ----------------
+    def voltar_dashboard(self):
+        """
+        Se a janela de Vendas foi aberta como janela filha (master é o dashboard que foi withdraw()),
+        mostramos (deiconify) o master e fechamos esta janela. Caso contrário, abrimos o dashboard em subprocess
+        (fallback) e destruímos esta janela.
+        """
+        try:
+            if self.master is not None:
+                # tenta usar deiconify caso o master exista no mesmo processo (dashboard.withdraw() foi chamado)
+                try:
+                    self.master.deiconify()
+                    self.destroy()
+                    return
+                except Exception:
+                    # se falhar, fallback abrir subprocess
+                    pass
+
+            # fallback: abre dashboard em novo processo (compatibilidade com fluxo do seu app)
+            dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
+            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.operador}" "{self.role}"')
+        except Exception:
+            pass
+        finally:
+            try:
+                self.destroy()
+            except Exception:
+                pass
 
 # execução direta para testes
 if __name__ == "__main__":
     app = VendasUI(operador="Teste", role="operador")
     app.mainloop()
+# ---------- Fim PARTE C ----------
