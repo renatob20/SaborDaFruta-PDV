@@ -23,6 +23,8 @@ class DashboardUI(ttk.Window):
         self.geometry("600x450")
         self.display_name = display_name
         self.role = role
+        self.operador = display_name
+        self.role = role
 
         self._build_ui()
 
@@ -47,6 +49,7 @@ class DashboardUI(ttk.Window):
         ttk.Button(menu_frame, text="⏰ Bater Ponto", width=25, bootstyle=INFO,
                    command=self.bater_ponto).pack(pady=5)
 
+        
         # Opções exclusivas do admin
         if self.role == "admin":
             ttk.Separator(menu_frame, orient="horizontal").pack(fill=X, pady=8)
@@ -56,6 +59,10 @@ class DashboardUI(ttk.Window):
                        command=self.abrir_usuarios).pack(pady=5)
             ttk.Button(menu_frame, text="📈 Relatórios", width=25, bootstyle=WARNING,
                        command=self.abrir_relatorios).pack(pady=5)
+            # --- Botão Estoque ---
+            ttk.Button(menu_frame, text="📦 Estoque", width=25, bootstyle=SECONDARY,
+                       command=self.abrir_estoque).pack(pady=5)
+
 
         ttk.Button(self, text="🚪 Sair", bootstyle=DANGER,
                    command=self.sair).pack(pady=25)
@@ -137,6 +144,30 @@ class DashboardUI(ttk.Window):
     def sair(self):
         self.destroy()
         subprocess.Popen([sys.executable, "main.py"])
+
+
+    def abrir_estoque(self):
+        try:
+            from ui.estoque_ui import EstoqueUI
+
+            self.withdraw()  # Oculta o dashboard
+
+            janela = EstoqueUI(master=self, operador=self.operador, role=self.role)
+            janela.transient(self)
+            janela.grab_set()
+
+        # Quando a janela for fechada → volta o dashboard
+            def voltar():
+                janela.grab_release()
+                janela.destroy()
+                self.deiconify()
+
+            janela.protocol("WM_DELETE_WINDOW", voltar)
+            self.wait_window(janela)
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível abrir o módulo de estoque:\n{e}")
+
 
 
 # Execução direta (para teste)
