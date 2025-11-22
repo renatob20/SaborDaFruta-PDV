@@ -9,12 +9,21 @@ from tkinter import messagebox
 # Garante que os módulos sejam encontrados mesmo quando executados via subprocess
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Importa a janela de Vendas para abrir como Toplevel no mesmo processo
+try:
+    from ui.vendas_ui import VendasUI
+except Exception:
+    # import no topo pode falhar em alguns cenários; faremos import local na função se necessário
+    VendasUI = None
+
 class DashboardUI(ttk.Window):
     def __init__(self, display_name, role):
         super().__init__(themename="superhero")
         self.title("🍧 Açaiteria o Sabor da Fruta - Painel Principal")
         self.geometry("600x450")
         self.display_name = display_name
+        self.role = role
+        self.operador = display_name
         self.role = role
 
         self._build_ui()
@@ -40,6 +49,7 @@ class DashboardUI(ttk.Window):
         ttk.Button(menu_frame, text="⏰ Bater Ponto", width=25, bootstyle=INFO,
                    command=self.bater_ponto).pack(pady=5)
 
+        
         # Opções exclusivas do admin
         if self.role == "admin":
             ttk.Separator(menu_frame, orient="horizontal").pack(fill=X, pady=8)
@@ -49,6 +59,10 @@ class DashboardUI(ttk.Window):
                        command=self.abrir_usuarios).pack(pady=5)
             ttk.Button(menu_frame, text="📈 Relatórios", width=25, bootstyle=WARNING,
                        command=self.abrir_relatorios).pack(pady=5)
+            # --- Botão Estoque ---
+            ttk.Button(menu_frame, text="📦 Estoque", width=25, bootstyle=SECONDARY,
+                       command=self.abrir_estoque).pack(pady=5)
+
 
         ttk.Button(self, text="🚪 Sair", bootstyle=DANGER,
                    command=self.sair).pack(pady=25)
@@ -56,9 +70,36 @@ class DashboardUI(ttk.Window):
     # ==== AÇÕES DO MENU ====
 
     def abrir_vendas(self):
-        self.destroy()
-        subprocess.Popen([sys.executable, "ui/vendas_ui.py",
-                          self.display_name, self.role])
+        try:
+            # importa localmente se necessário
+            if VendasUI is None:
+                from ui.vendas_ui import VendasUI
+
+            # oculta o dashboard enquanto a janela de vendas estiver aberta
+            self.withdraw()
+
+            vendas_win = VendasUI(master=self, operador=self.display_name, role=self.role)
+            vendas_win.transient(self)   # janela filha
+            vendas_win.grab_set()        # concentra eventos na janela de vendas
+
+            def _on_vendas_close():
+                try:
+                    vendas_win.grab_release()
+                    vendas_win.destroy()
+                finally:
+                    self.deiconify()
+
+            vendas_win.protocol("WM_DELETE_WINDOW", _on_vendas_close)
+            # aguarda fechamento da janela filha sem criar outro mainloop
+            self.wait_window(vendas_win)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível abrir Vendas: {e}")
+            # fallback: abrir como subprocess (menos recomendado)
+            try:
+                subprocess.Popen([sys.executable, "ui/vendas_ui.py", self.display_name, self.role])
+                self.destroy()
+            except Exception:
+                pass
 
     def abrir_produtos(self):
         """Abre o módulo de produtos sem quebrar o contexto da janela."""
@@ -72,7 +113,30 @@ class DashboardUI(ttk.Window):
                           self.display_name, self.role])
 
     def abrir_relatorios(self):
-        messagebox.showinfo("Relatórios", "Módulo de relatórios em desenvolvimento.")
+        try:
+        # import local para evitar erro de import circular
+            from ui.relatorios_ui import RelatoriosUI
+
+        # Oculta o dashboard enquanto a janela estiver aberta
+            self.withdraw()
+
+            win = RelatoriosUI(operador=self.display_name, role=self.role)
+            win.transient(self)  
+            win.grab_set()
+
+            def _on_close():
+                try:
+                    win.grab_release()
+                    win.destroy()
+                finally:
+                    self.deiconify()
+
+            win.protocol("WM_DELETE_WINDOW", _on_close)
+            self.wait_window(win)
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível abrir Relatórios:\n{e}")
+
 
     def bater_ponto(self):
         messagebox.showinfo("Ponto", f"Ponto registrado para {self.display_name}!")
@@ -80,6 +144,30 @@ class DashboardUI(ttk.Window):
     def sair(self):
         self.destroy()
         subprocess.Popen([sys.executable, "main.py"])
+
+
+    def abrir_estoque(self):
+        try:
+            from ui.estoque_ui import EstoqueUI
+
+            self.withdraw()  # Oculta o dashboard
+
+            janela = EstoqueUI(master=self, operador=self.operador, role=self.role)
+            janela.transient(self)
+            janela.grab_set()
+
+        # Quando a janela for fechada → volta o dashboard
+            def voltar():
+                janela.grab_release()
+                janela.destroy()
+                self.deiconify()
+
+            janela.protocol("WM_DELETE_WINDOW", voltar)
+            self.wait_window(janela)
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível abrir o módulo de estoque:\n{e}")
+
 
 
 # Execução direta (para teste)
