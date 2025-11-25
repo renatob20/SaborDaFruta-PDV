@@ -369,12 +369,26 @@ class VendasUI(ttk.Window):
         pid = info.get("id")
         preco = float(info.get("preco", 0.0))
 
+        quantidade = None  # inicializa
+        peso = None
+
         if tipo.lower() == "sorvete":
-            peso = parse_brl_to_float(self.peso_var.get())
-            if peso <= 0:
-                messagebox.showwarning("Atenção", "Informe um peso válido (kg).")
+            # peso digitado em GRAMAS → converter para KG
+            peso_digitado = self.peso_var.get().strip()
+
+            if not peso_digitado.isdigit():
+                messagebox.showwarning("Atenção", "Digite o peso no formato 000 (gramas).")
                 return
-            quantidade = None
+
+            gramas = int(peso_digitado)
+
+            if gramas <= 0:
+                messagebox.showwarning("Atenção", "Valor inválido (gramas deve ser maior que zero).")
+                return
+
+            # converter para kg
+            peso = gramas / 1000.0
+            # subtotal com base no peso em kg
             subtotal = round(peso * preco, 2)
         else:
             try:
@@ -384,7 +398,6 @@ class VendasUI(ttk.Window):
             if quantidade <= 0:
                 messagebox.showwarning("Atenção", "Informe uma quantidade válida.")
                 return
-            peso = None
             subtotal = round(quantidade * preco, 2)
 
         item = {
