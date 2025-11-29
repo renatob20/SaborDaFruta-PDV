@@ -1,245 +1,189 @@
-# ui/dashboard_ui.py
-import sys, os
+# ui/dashboard_ui.py  — PARTE A
+import sys
+import os
 import subprocess
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
 
-# Garante que o Python encontre os módulos do projeto
+# garante que imports relativos funcionem quando executado diretamente
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-# Import seguro do módulo de ponto
-try:
-    from ui.bater_ponto_ui import BaterPontoUI
-except Exception:
-    BaterPontoUI = None
+"""
+DashboardUI - versão unificada e segura.
 
-# Import seguro do módulo de vendas
-try:
-    from ui.vendas_ui import VendasUI
-except Exception:
-    VendasUI = None
+Principais mudanças:
+- Usa import "late-bound" (dinâmico) para evitar import circular.
+- Não passa 'master' automaticamente para as UIs filhas (evita erro de assinatura).
+- Usa _open_child_window(import_path, class_name, **kwargs) para abrir telas filhas.
+- Quando possível abre a UI no mesmo processo (sem criar novo mainloop) usando wait_window.
+- Se houver erro, exibe messagebox e tenta fallback por subprocess (compatibilidade).
+"""
+
+# ui/dashboard_ui.py  — PARTE B
 
 class DashboardUI(ttk.Window):
-    def __init__(self, display_name, role):
+    def __init__(self, display_name="Usuário", role="operador"):
         super().__init__(themename="superhero")
+        self.title("🍧 Açaiteria o Sabor da Fruta - Painel Principal")
+        self.geometry("600x460")
+        self.minsize(560, 420)
 
-        self.title("🍧 Açaiteria o Sabor da Fruta - Dashboard")
-        self.geometry("600x450")
-        self.minsize(600, 450)
-
+        # dados vindos do login
         self.display_name = display_name
         self.role = role
-        self.operador = display_name
+        self.operador = display_name  # compatibilidade com telas filhas que usam .operador
 
         self._build_ui()
 
     def _build_ui(self):
+        # header
+        header = ttk.Frame(self, padding=12)
+        header.pack(fill="x")
+        ttk.Label(header, text=f"Bem-vindo(a), {self.display_name}!", font=("Segoe UI", 16, "bold")).pack(pady=(4,2))
+        ttk.Label(header, text=f"Perfil: {self.role.capitalize()}", font=("Segoe UI", 11)).pack()
 
-        ttk.Label(
-            self,
-            text=f"Bem-vindo(a), {self.display_name}!",
-            font=("Segoe UI", 16, "bold")
-        ).pack(pady=10)
+        # menu central
+        menu_frame = ttk.Frame(self, padding=12)
+        menu_frame.pack(pady=16)
 
-        ttk.Label(
-            self,
-            text=f"Perfil: {self.role.capitalize()}",
-            font=("Segoe UI", 11)
-        ).pack()
+        # Botões principais (sempre usar import local nas funções para evitar ciclos)
+        ttk.Button(menu_frame, text="🛒 Vendas", width=25, bootstyle=SUCCESS, command=self.abrir_vendas).pack(pady=6)
+        ttk.Button(menu_frame, text="⏰ Bater Ponto", width=25, bootstyle=INFO, command=self.abrir_bater_ponto).pack(pady=6)
+        ttk.Button(menu_frame, text="📦 Estoque", width=25, bootstyle=SECONDARY, command=self.abrir_estoque).pack(pady=6)
 
-        menu_frame = ttk.Frame(self, padding=10)
-        menu_frame.pack(pady=20)
-
-        # ---------- BOTÕES COMUNS ----------
-        
-        ttk.Button(
-            menu_frame,
-            text="🛒 Vendas",
-            width=25,
-            bootstyle=SUCCESS,
-            command=self.abrir_vendas
-        ).pack(pady=5)
-
-        ttk.Button(
-            menu_frame,
-            text="⏰ Bater Ponto",
-            width=25,
-            bootstyle=INFO,
-            command=self.abrir_bater_ponto
-        ).pack(pady=5)
-
-        # ---------- BOTÕES DO ADMIN ----------
+        # separador e opções admin
         if self.role == "admin":
-            ttk.Separator(menu_frame, orient="horizontal").pack(fill=X, pady=10)
+            ttk.Separator(menu_frame, orient="horizontal").pack(fill="x", pady=10)
+            ttk.Button(menu_frame, text="📦 Produtos", width=25, bootstyle=PRIMARY, command=self.abrir_produtos).pack(pady=6)
+            ttk.Button(menu_frame, text="👤 Usuários", width=25, bootstyle=SECONDARY, command=self.abrir_usuarios).pack(pady=6)
+            ttk.Button(menu_frame, text="📈 Relatórios", width=25, bootstyle=WARNING, command=self.abrir_relatorios).pack(pady=6)
 
-            ttk.Button(
-                menu_frame,
-                text="📦 Produtos",
-                width=25,
-                bootstyle=PRIMARY,
-                command=self.abrir_produtos
-            ).pack(pady=5)
+        # sair
+        ttk.Button(self, text="🚪 Sair", bootstyle=DANGER, command=self.sair).pack(pady=20)
 
-            ttk.Button(
-                menu_frame,
-                text="👤 Usuários",
-                width=25,
-                bootstyle=SECONDARY,
-                command=self.abrir_usuarios
-            ).pack(pady=5)
-
-            ttk.Button(
-                menu_frame,
-                text="📈 Relatórios",
-                width=25,
-                bootstyle=WARNING,
-                command=self.abrir_relatorios
-            ).pack(pady=5)
-
-            ttk.Button(
-                menu_frame,
-                text="📦 Estoque",
-                width=25,
-                bootstyle=INFO,
-                command=self.abrir_estoque
-            ).pack(pady=5)
-
-        # ---------- SAIR ----------
-        ttk.Button(
-            self,
-            text="🚪 Sair",
-            bootstyle=DANGER,
-            command=self.sair
-        ).pack(pady=20)
-
-    def abrir_vendas(self):
+    # utilitário: abrir janela com padrão seguro (filha no mesmo processo)
+    def _open_child_window(self, import_path: str, class_name: str, *args, **kwargs) -> bool:
+        """
+        Importa dinamicamente a UI filha e a abre como janela filha (sem criar mainloop extra).
+        - import_path: e.g. "ui.vendas_ui"
+        - class_name: e.g. "VendasUI"
+        - kwargs: passamos apenas argumentos simples (operador, role, etc).
+        Retorna True se abriu com sucesso, False caso contrário.
+        """
         try:
-            if VendasUI is None:
-                from ui.vendas_ui import VendasUI
-
-            self.withdraw()
-
-            janela = VendasUI(master=self, operador=self.display_name, role=self.role)
-
-            janela.transient(self)
-            janela.grab_set()
-
-            def fechar():
-                janela.grab_release()
-                janela.destroy()
-                self.deiconify()
-
-            janela.protocol("WM_DELETE_WINDOW", fechar)
-
-            self.wait_window(janela)
-
+            module = __import__(import_path, fromlist=[class_name])
+            cls = getattr(module, class_name)
         except Exception as e:
-            messagebox.showerror("Erro", f"Não foi possível abrir Vendas:\n{e}")
+            messagebox.showerror("Erro", f"Não foi possível carregar {class_name}:\n{e}")
+            return False
 
-    def abrir_bater_ponto(self):
-
-        """Abre a tela de Bater Ponto como janela filha corretamente (sem criar mainloop extra)."""
         try:
-            # import local para evitar import circular em tempo de import do módulo
-            from ui.bater_ponto_ui import BaterPontoUI
+            # Cria instância da janela filha. Evitamos passar 'master' por padrão:
+            # muitos módulos esperam apenas (operador, role) e deram erro quando recebiam master.
+            win = cls(*args, **kwargs)
+        except TypeError as e:
+            # Tentativa alternativa: algumas UIs aceitam master como primeiro arg.
+            try:
+                win = cls(master=self, *args, **kwargs)
+            except Exception as e2:
+                messagebox.showerror("Erro", f"Falha ao criar {class_name}:\n{e}\n{e2}")
+                return False
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao criar {class_name}:\n{e}")
+            return False
 
-        # esconde dashboard e abre janela filha
-            self.withdraw()
-            janela = BaterPontoUI(master=self, operador_display=self.display_name, role=self.role)
-            janela.transient(self)
-            janela.grab_set()
+        # Se a janela filha for um ttk.Window (novo root), marcamos transient() e wait_window.
+        try:
+            # tenta definir filho/parent relationship de forma segura
+            try:
+                win.transient(self)
+            except Exception:
+                pass
+            try:
+                win.grab_set()
+            except Exception:
+                pass
 
-            def _on_close():
+            def _on_child_close():
                 try:
-                    janela.grab_release()
-                    janela.destroy()
+                    win.grab_release()
+                except Exception:
+                    pass
+                try:
+                    win.destroy()
                 finally:
-                    self.deiconify()
+                    try:
+                        self.deiconify()
+                    except Exception:
+                        pass
 
-            janela.protocol("WM_DELETE_WINDOW", _on_close)
-            # aguarda fechamento sem criar novo mainloop
-            self.wait_window(janela)
+            win.protocol("WM_DELETE_WINDOW", _on_child_close)
 
+            # opcional: oculta o dashboard enquanto a janela filha estiver aberta
+            try:
+                self.withdraw()
+            except Exception:
+                pass
+
+            # Espera a janela fechar (sem criar novo mainloop)
+            try:
+                self.wait_window(win)
+            except Exception:
+                # se wait_window falhar (porwin não ser um widget tkinter), só retorna.
+                pass
+            return True
         except Exception as e:
-            # fallback: exibe erro e tenta abrir em subprocess (compat)
-            messagebox.showerror("Erro", f"Não foi possível abrir o módulo de Ponto:\n{e}")
+            messagebox.showerror("Erro", f"Falha ao abrir a janela {class_name}:\n{e}")
+            return False
+
+    # ação sair
+    def sair(self):
         try:
-            import subprocess
-            subprocess.Popen([sys.executable, "ui/bater_ponto_ui.py", self.display_name, self.role])
-            self.destroy()
+            subprocess.Popen([sys.executable, "main.py"])
         except Exception:
             pass
+        finally:
+            try:
+                self.destroy()
+            except Exception:
+                pass
 
-    def abrir_produtos(self):
-        self.destroy()
-        subprocess.Popen([sys.executable, "ui/produtos_ui.py", self.display_name, self.role])
+# ui/dashboard_ui.py  — PARTE C
 
-    def abrir_usuarios(self):
-        self.destroy()
-        subprocess.Popen([sys.executable, "ui/usuarios_ui.py", self.display_name, self.role])
+    # ==== AÇÕES DO MENU - wrappers que usam _open_child_window ==== #
 
-    def abrir_relatorios(self):
-        try:
-            from ui.relatorios_ui import RelatoriosUI
+    def abrir_vendas(self):
+        # abre a tela de vendas (passa operador e role)
+        self._open_child_window("ui.vendas_ui", "VendasUI", operador=self.display_name, role=self.role)
 
-            self.withdraw()
-
-            janela = RelatoriosUI(operador=self.display_name, role=self.role)
-
-            janela.transient(self)
-            janela.grab_set()
-
-            def fechar():
-                janela.grab_release()
-                janela.destroy()
-                self.deiconify()
-
-            janela.protocol("WM_DELETE_WINDOW", fechar)
-            self.wait_window(janela)
-
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao abrir Relatórios:\n{e}")
+    def abrir_bater_ponto(self):
+        # abre a tela Bater Ponto (nova UI)
+        self._open_child_window("ui.bater_ponto_ui", "BaterPontoUI", operador_display=self.display_name, role=self.role)
 
     def abrir_estoque(self):
-        try:
-            from ui.estoque_ui import EstoqueUI
+        self._open_child_window("ui.estoque_ui", "EstoqueUI", operador=self.display_name, role=self.role)
 
-            self.withdraw()
+    def abrir_produtos(self):
+        self._open_child_window("ui.produtos_ui", "ProdutosUI", operador=self.display_name, role=self.role)
 
-            janela = EstoqueUI(master=self, operador=self.display_name, role=self.role)
+    def abrir_usuarios(self):
+        self._open_child_window("ui.usuarios_ui", "UsuariosUI", operador=self.display_name, role=self.role)
 
-            janela.transient(self)
-            janela.grab_set()
-
-            def voltar():
-                janela.grab_release()
-                janela.destroy()
-                self.deiconify()
-
-            janela.protocol("WM_DELETE_WINDOW", voltar)
-            self.wait_window(janela)
-
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao abrir Estoque:\n{e}")
-
-    def sair(self):
-        self.destroy()
-        subprocess.Popen([sys.executable, "main.py"])
+    def abrir_relatorios(self):
+        self._open_child_window("ui.relatorios_ui", "RelatoriosUI", operador=self.display_name, role=self.role)
 
 
-# Execução direta
+# Execução direta (para teste)
 if __name__ == "__main__":
-
     if len(sys.argv) >= 3:
-        nome = sys.argv[1]
+        display_name = sys.argv[1]
         role = sys.argv[2]
     else:
-        nome = "Usuário"
+        display_name = "Usuario"
         role = "operador"
 
-    app = DashboardUI(nome, role)
+    app = DashboardUI(display_name, role)
     app.mainloop()
-
