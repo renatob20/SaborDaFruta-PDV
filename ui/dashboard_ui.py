@@ -5,6 +5,8 @@ import subprocess
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
+import logging
+import traceback
 
 # Garante que os módulos sejam encontrados mesmo quando executados via subprocess
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +17,16 @@ try:
 except Exception:
     # import no topo pode falhar em alguns cenários; faremos import local na função se necessário
     VendasUI = None
+
+
+try:
+    from ui.bater_ponto_ui import BaterPontoUI    
+except Exception:
+    BaterPontoUI = None
+
+
+# config básica de logging (stdout)
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
 
 class DashboardUI(ttk.Window):
     def __init__(self, display_name, role):
@@ -139,7 +151,12 @@ class DashboardUI(ttk.Window):
 
 
     def bater_ponto(self):
-        messagebox.showinfo("Ponto", f"Ponto registrado para {self.display_name}!")
+        """Abre o módulo de bater ponto como janela independente (subprocess)."""
+        try:
+            subprocess.Popen([sys.executable, "ui/bater_ponto_ui.py", self.display_name, self.role])
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível abrir Bater Ponto: {e}")
+
 
     def sair(self):
         self.destroy()
