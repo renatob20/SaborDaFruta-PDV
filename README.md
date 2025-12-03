@@ -7,6 +7,8 @@ o que está funcionando:
 
  - Tela Produtos:   - OK
 
+
+Comecarei a atuar nessa tela com a branch de feature/vendas
  - Tela de vendas:
      - ao clicar apresenta o erro: Não foi possivel abrir vendas: cannot acesses local variable 'VendasUI' where it is not associated with a value (OK, abre o novo layout)
      - Ao registar uma venda apresenta a mensagem: Falha ao gravar venda: table vendas has not column named total
