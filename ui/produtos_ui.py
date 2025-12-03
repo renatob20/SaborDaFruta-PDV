@@ -63,7 +63,7 @@ class ProdutosUI(ttk.Window):
 
         btns = ttk.Frame(self)
         btns.pack(fill=X, pady=8, padx=12)
-        ttk.Button(btns, text="💾 Salvar", bootstyle=SUCCESS, command=self.salvar_produto).pack(side=LEFT, padx=6)
+        ttk.Button(btns, text="💾 Cadastrar", bootstyle=SUCCESS, command=self.salvar_produto).pack(side=LEFT, padx=6)
         ttk.Button(btns, text="✏️ Editar", bootstyle=INFO, command=self.iniciar_edicao).pack(side=LEFT, padx=6)
         ttk.Button(btns, text="🗑️ Excluir", bootstyle=DANGER, command=self.excluir_produto).pack(side=LEFT, padx=6)
         ttk.Button(btns, text="🔙 Voltar", bootstyle=SECONDARY, command=self.voltar_dashboard).pack(side=RIGHT, padx=6)
