@@ -11,8 +11,12 @@ o que está funcionando:
 Comecarei a atuar nessa tela com a branch de feature/vendas
  - Tela de vendas:
      - ao clicar apresenta o erro: Não foi possivel abrir vendas: cannot acesses local variable 'VendasUI' where it is not associated with a value (OK, abre o novo layout)
+     
      - Ao registar uma venda apresenta a mensagem: Falha ao gravar venda: table vendas has not column named total
+     
      - Ao adicionar sorvete e informar o valor de 100 no campo Peso KG o subtotal passa para 5.500,00
+         ---> OK
+
      - Botão sair: fecha o programa e apresenta o erro no terminal: A sintaxe do nome do arquivo, do nome do diretório ou do rótulo do volume está incorreta.
   
    

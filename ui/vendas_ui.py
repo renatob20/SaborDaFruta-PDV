@@ -29,18 +29,34 @@ def brl_format(value):
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return s
 
-def parse_brl_to_float(text):
-    """Converte '1.234,56' ou '1234.56' ou '1234,56' -> float (safe)."""
-    if text is None:
+def parse_peso_kg_input(text):
+    """
+    Aceita entradas:
+      - '0.100' → 0.100 kg
+      - '100' → 0.100 kg (interpreta como gramas)
+      - '100g' → 0.100 kg
+      - '0,100' → 0.100 kg
+    Retorna float em KG.
+    """
+    if not text:
         return 0.0
-    t = str(text).strip()
-    if t == "":
-        return 0.0
-    t = t.replace(".", "").replace(",", ".")
+
+    s = str(text).strip().lower().replace(" ", "")
+    if s.endswith("g"):
+        s = s[:-1]
+
+    s = s.replace(",", ".")
+
     try:
-        return float(t)
-    except Exception:
+        val = float(s)
+    except:
         return 0.0
+
+    # se usuário digitou GRAMAS (ex: 100 → 100g)
+    if val >= 10:
+        return val / 1000.0
+
+    return val
 
 # ----------------- DB init (garante tabelas essenciais para vendas) -----------------
 def ensure_tables():
@@ -51,7 +67,6 @@ def ensure_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             data_venda TEXT NOT NULL,
             operador TEXT,
-            total REAL NOT NULL,
             forma_pagamento TEXT,
             valor_recebido REAL,
             troco REAL
@@ -71,6 +86,17 @@ def ensure_tables():
             FOREIGN KEY(venda_id) REFERENCES vendas(id)
         );
     """)
+
+     # Verifica se coluna 'total' existe na tabela vendas; se não, adiciona.
+    cur.execute("PRAGMA table_info(vendas);")
+    cols = [r[1] for r in cur.fetchall()]  # r[1] é o nome da coluna
+    if "total" not in cols:
+        try:
+            cur.execute("ALTER TABLE vendas ADD COLUMN total REAL DEFAULT 0.0;")
+        except Exception:
+            # alguns ambientes SQLite antigos podem falhar — em caso extremo, mantemos compatibilidade
+            pass
+
     conn.commit()
     conn.close()
 # ---------- Fim PARTE A ----------
@@ -370,7 +396,10 @@ class VendasUI(ttk.Window):
         preco = float(info.get("preco", 0.0))
 
         if tipo.lower() == "sorvete":
-            peso = parse_brl_to_float(self.peso_var.get())
+            peso = parse_peso_kg_input(self.peso_var.get())
+            
+            
+            
             if peso <= 0:
                 messagebox.showwarning("Atenção", "Informe um peso válido (kg).")
                 return
