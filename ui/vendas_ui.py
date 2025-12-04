@@ -101,9 +101,10 @@ def ensure_tables():
     conn.close()
 # ---------- Fim PARTE A ----------
 # ---------- PARTE B: UI builder (layout) ----------
-class VendasUI(ttk.Window):
-    def __init__(self, master=None, operador="Operador", role="operador"):
-        super().__init__(themename="superhero")
+class VendasUI(ttk.Toplevel):
+    def __init__(self, master=None, operador=None, role="operador"):
+        super().__init__(master=master)
+        
         self.master = master
         self.operador = operador
         self.role = role
@@ -636,6 +637,25 @@ class VendasUI(ttk.Window):
 
 # execução direta para testes
 if __name__ == "__main__":
-    app = VendasUI(operador="Teste", role="operador")
-    app.mainloop()
+    import sys
+    
+    # obtém argumentos passados via linha de comando (do dashboard)
+    operador = sys.argv[1] if len(sys.argv) > 1 else "Operador"
+    role = sys.argv[2] if len(sys.argv) > 2 else "operador"
+    
+    # cria janela root (mainloop próprio)
+    root = ttk.Window(themename="superhero")
+    root.withdraw()  # oculta a root invisível
+    
+    # cria janela de vendas como filha
+    win = VendasUI(master=root, operador=operador, role=role)
+    win.transient(root)
+    
+    def on_close():
+        win.destroy()
+        root.destroy()
+    
+    win.protocol("WM_DELETE_WINDOW", on_close)
+    root.deiconify()
+    root.mainloop()
 # ---------- Fim PARTE C ----------
