@@ -2,6 +2,7 @@
 import os
 import sys
 import sqlite3
+import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -18,6 +19,8 @@ if ROOT not in sys.path:
 # use a função de conexão do módulo de products (mesmo DB_PATH)
 from database.products_db import get_connection
 
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
+
 # ----------------- Helpers -----------------
 def brl_format(value):
     """Formata float/Decimal -> '1.234,56' (BRL style)."""
@@ -28,6 +31,16 @@ def brl_format(value):
     s = f"{v:,.2f}"
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return s
+
+def parse_brl_to_float(value):
+    """Converte string BRL '1.234,56' -> float 1234.56"""
+    if not value:
+        return 0.0
+    s = str(value).strip().replace("R$", "").replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
 
 def parse_peso_kg_input(text):
     """
@@ -65,11 +78,13 @@ def ensure_tables():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS vendas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo_produto TEXT,
             data_venda TEXT NOT NULL,
             operador TEXT,
             forma_pagamento TEXT,
             valor_recebido REAL,
-            troco REAL
+            troco REAL,
+            total REAL DEFAULT 0.0
         );
     """)
     cur.execute("""
@@ -81,25 +96,26 @@ def ensure_tables():
             tipo TEXT,
             quantidade INTEGER,
             peso_kg REAL,
-            valor_unit REAL,
+            preco_unitario REAL,
             subtotal REAL,
             FOREIGN KEY(venda_id) REFERENCES vendas(id)
         );
     """)
 
-     # Verifica se coluna 'total' existe na tabela vendas; se não, adiciona.
+    # Verifica se coluna 'total' existe na tabela vendas; se não, adiciona.
     cur.execute("PRAGMA table_info(vendas);")
     cols = [r[1] for r in cur.fetchall()]  # r[1] é o nome da coluna
     if "total" not in cols:
         try:
             cur.execute("ALTER TABLE vendas ADD COLUMN total REAL DEFAULT 0.0;")
         except Exception:
-            # alguns ambientes SQLite antigos podem falhar — em caso extremo, mantemos compatibilidade
             pass
 
     conn.commit()
     conn.close()
+
 # ---------- Fim PARTE A ----------
+
 # ---------- PARTE B: UI builder (layout) ----------
 class VendasUI(ttk.Toplevel):
     def __init__(self, master=None, operador=None, role="operador"):
@@ -251,7 +267,7 @@ class VendasUI(ttk.Toplevel):
         self.troco_entry = ttk.Entry(resumo, textvariable=self.troco_var, width=20, state="readonly")
         self.troco_entry.grid(row=3, column=1, padx=6)
 
-        ttk.Button(resumo, text="✔️ Finalizar Venda", bootstyle=SUCCESS, command=self.finalizar_venda).grid(row=4, column=0, columnspan=2, pady=12)
+        ttk.Button(resumo, text="✔️ Finalizar Venda", bootstyle=SUCCESS, command=self._finalizar_venda).grid(row=4, column=0, columnspan=2, pady=12)
         ttk.Button(resumo, text="🔙 Sair", bootstyle=INFO, command=self.voltar_dashboard).grid(row=5, column=0, columnspan=2)
 
         # últimas vendas
@@ -267,8 +283,11 @@ class VendasUI(ttk.Toplevel):
         self.tree_recent.column("total", width=90, anchor="center")
         self.tree_recent.column("operador", width=100, anchor="center")
         self.tree_recent.pack(fill=BOTH, expand=True)
+
 # ---------- Fim PARTE B ----------
+
 # ---------- PARTE C: lógica (carregamento, carrinho, finalização, voltar) ----------
+
     # ---------------- carregamento de produtos ----------
     def _load_produtos(self):
         """
@@ -312,6 +331,7 @@ class VendasUI(ttk.Toplevel):
             self.produto_cb.set("")
             self.produto_cb['values'] = []
         except Exception as e:
+            logging.exception("Erro ao carregar produtos:")
             messagebox.showerror("Erro", f"Falha ao carregar produtos: {e}")
 
     # ---------------- evento tipo selecionado ----------------
@@ -398,8 +418,6 @@ class VendasUI(ttk.Toplevel):
 
         if tipo.lower() == "sorvete":
             peso = parse_peso_kg_input(self.peso_var.get())
-            
-            
             
             if peso <= 0:
                 messagebox.showwarning("Atenção", "Informe um peso válido (kg).")
@@ -513,7 +531,6 @@ class VendasUI(ttk.Toplevel):
         else:
             # other payments, troco stays 0
             self.troco_var.set(brl_format(0.0))
-            # _atualizar_troco() will keep troco 0 when forma != Dinheiro
 
     def _atualizar_troco(self):
         try:
@@ -527,70 +544,122 @@ class VendasUI(ttk.Toplevel):
             self.troco_var.set(brl_format(0.0))
 
     # ---------------- finalizar venda ----------------
-    def finalizar_venda(self):
-        if not self.carrinho:
-            messagebox.showwarning("Atenção", "Carrinho vazio.")
-            return
-        forma = self.forma_cb.get()
-        if not forma:
-            messagebox.showwarning("Atenção", "Selecione forma de pagamento.")
-            return
-        # parse recebido only if money, otherwise store None
-        recebido = parse_brl_to_float(self.recebido_var.get()) if forma == "Dinheiro" else None
-        troco = parse_brl_to_float(self.troco_var.get()) if forma == "Dinheiro" else 0.0
-        if forma == "Dinheiro" and (recebido is None or recebido < self.total):
-            messagebox.showwarning("Atenção", "Valor recebido insuficiente.")
-            return
+    def _finalizar_venda(self):
+        """Finaliza a venda e grava no banco."""
         try:
+            # valida dados
+            tipo_produto = (self.tipo_cb.get() or "").strip()
+            forma_pagamento = (self.forma_cb.get() or "").strip()  # ✅ CORRIGIDO: forma_cb, não pagamento_var
+            valor_recebido_str = (self.recebido_var.get() or "0").strip()  # ✅ CORRIGIDO: recebido_var, não valor_recebido_var
+            
+            if not tipo_produto:
+                messagebox.showwarning("Atenção", "Selecione um tipo de produto.")
+                return
+            
+            if not forma_pagamento:
+                messagebox.showwarning("Atenção", "Selecione a forma de pagamento.")
+                return
+            
+            # valida itens no carrinho
+            if not self.carrinho:
+                messagebox.showwarning("Atenção", "Carrinho vazio.")
+                return
+            
+            # calcula totais
+            valor_recebido = parse_brl_to_float(valor_recebido_str)  # ✅ usa a função helper
+            total = parse_brl_to_float(self.total_var.get())  # ✅ usa a função helper
+            troco = valor_recebido - total
+            
+            # grava na tabela vendas
             conn = get_connection()
             cur = conn.cursor()
+            
+            timestamp = datetime.now().isoformat(sep=" ")
+            
+            # INSERT com TODOS os campos obrigatórios
             cur.execute("""
-                INSERT INTO vendas (data_venda, operador, total, forma_pagamento, valor_recebido, troco)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), self.operador, self.total, forma, recebido, troco))
+                INSERT INTO vendas (
+                    tipo_produto, 
+                    forma_pagamento, 
+                    total, 
+                    valor_recebido, 
+                    troco, 
+                    data_venda, 
+                    operador
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                tipo_produto,
+                forma_pagamento,
+                total,
+                valor_recebido,
+                troco,
+                timestamp,
+                self.operador or "operador"
+            ))
+            
             venda_id = cur.lastrowid
-            # grava itens
-            for it in self.carrinho:
+            
+            # grava itens do carrinho
+            for item in self.carrinho:
                 cur.execute("""
-                    INSERT INTO venda_items (venda_id, produto_id, produto_nome, tipo, quantidade, peso_kg, valor_unit, subtotal)
+                    INSERT INTO venda_items (
+                        venda_id, 
+                        produto_id, 
+                        produto_nome,
+                        tipo,
+                        quantidade, 
+                        peso_kg,
+                        preco_unitario, 
+                        subtotal
+                    )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     venda_id,
-                    it.get("produto_id"),
-                    it.get("produto_nome"),
-                    it.get("tipo"),
-                    it.get("quantidade"),
-                    it.get("peso_kg"),
-                    it.get("valor_unit"),
-                    it.get("subtotal")
+                    item.get("produto_id", 0),
+                    item.get("produto_nome", ""),
+                    item.get("tipo", ""),
+                    item.get("quantidade"),
+                    item.get("peso_kg"),
+                    item.get("valor_unit", 0.0),
+                    item.get("subtotal", 0.0)
                 ))
-                # decrementa estoque se for unidade e existir coluna estoque
-                try:
-                    if it.get("quantidade") is not None:
-                        c2 = conn.cursor()
-                        c2.execute("SELECT estoque FROM produtos WHERE id=?", (it["produto_id"],))
-                        row = c2.fetchone()
-                        if row and row[0] is not None:
-                            novo = max(0, int(row[0]) - int(it["quantidade"]))
-                            c2.execute("UPDATE produtos SET estoque=? WHERE id=?", (novo, it["produto_id"]))
-                except Exception:
-                    pass
+            
             conn.commit()
             conn.close()
+            
+            messagebox.showinfo(
+                "Sucesso",
+                f"Venda #{venda_id} gravada com sucesso!\n\nTotal: R$ {total:.2f}\nTroco: R$ {troco:.2f}"
+            )
+            
+            # limpa formulário
+            self._limpar_carrinho()
+            self._resetar_campos()
+            
+        except Exception as e:
+            logging.exception("Erro ao finalizar venda:")
+            messagebox.showerror("Erro", f"Falha ao gravar venda: {e}")
+        
 
-            messagebox.showinfo("Venda registrada", f"Venda ID {venda_id} registrada!\nTotal: R$ {self.total:.2f}")
-            # limpa tela
-            self.carrinho.clear()
-            self._refresh_carrinho()
-            self._recalcular_total()
-            # reset pagamento
-            self.forma_cb.set("")
-            self.recebido_var.set(brl_format(0.0))
-            self.troco_var.set(brl_format(0.0))
-            self._carregar_vendas_recentes()
-        except sqlite3.Error as e:
-            messagebox.showerror("Erro BD", f"Falha ao gravar venda: {e}")
-
+    def _limpar_carrinho(self):
+        """Limpa o carrinho."""
+        self.carrinho.clear()
+        self._refresh_carrinho()
+        self._recalcular_total()
+    
+    def _resetar_campos(self):
+        """Reseta todos os campos após finalizar venda."""
+        self.tipo_cb.set("")
+        self.produto_cb.set("")
+        self.qtd_var.set("")
+        self.peso_var.set("")
+        self.valor_unit_var.set(brl_format(0.0))
+        self.recebido_var.set(brl_format(0.0))
+        self.troco_var.set(brl_format(0.0))
+        self.forma_cb.set("")
+        self._carregar_vendas_recentes()  # atualiza listagem de últimas vendas
+       
     # ---------------- carregar ultimas vendas ----------------
     def _carregar_vendas_recentes(self):
         try:
@@ -635,6 +704,8 @@ class VendasUI(ttk.Toplevel):
             except Exception:
                 pass
 
+# ---------- Fim PARTE C ----------
+
 # execução direta para testes
 if __name__ == "__main__":
     import sys
@@ -658,4 +729,3 @@ if __name__ == "__main__":
     win.protocol("WM_DELETE_WINDOW", on_close)
     root.deiconify()
     root.mainloop()
-# ---------- Fim PARTE C ----------
