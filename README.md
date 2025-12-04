@@ -25,6 +25,7 @@ Comecarei a atuar nessa tela com a branch de feature/vendas
      - Ao adicionar sorvete e informar o valor de 100 no campo Peso KG o subtotal passa para 5.500,00
          ---> OK
 
+    Trabalhando nesse erro
      - Botão sair: fecha o programa e apresenta o erro no terminal: A sintaxe do nome do arquivo, do nome do diretório ou do rótulo do volume está incorreta.
   
    
