@@ -683,30 +683,26 @@ class VendasUI(ttk.Toplevel):
         (fallback) e destruímos esta janela.
         """
         try:
+            # Se master existe e é válido, tira do withdraw
             if self.master is not None:
-                # tenta usar deiconify caso o master exista no mesmo processo (dashboard.withdraw() foi chamado)
                 try:
                     self.master.deiconify()
-                    self.destroy()
-                    return
                 except Exception:
-                    # se falhar, fallback abrir subprocess
                     pass
-
-            # fallback: abre dashboard em novo processo (compatibilidade com fluxo do seu app)
-            dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
-            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.operador}" "{self.role}"')
         except Exception:
             pass
         finally:
+            # Sempre fecha a janela de vendas
             try:
                 self.destroy()
             except Exception:
                 pass
 
+  
+
 # ---------- Fim PARTE C ----------
 
-# execução direta para testes
+#execução direta para testes
 if __name__ == "__main__":
     import sys
     
@@ -720,12 +716,12 @@ if __name__ == "__main__":
     
     # cria janela de vendas como filha
     win = VendasUI(master=root, operador=operador, role=role)
-    win.transient(root)
+    #win.transient(root)
     
     def on_close():
         win.destroy()
         root.destroy()
     
     win.protocol("WM_DELETE_WINDOW", on_close)
-    root.deiconify()
+    #root.deiconify()
     root.mainloop()
