@@ -97,7 +97,8 @@ class DashboardUI(ttk.Window):
         # Oculta o dashboard enquanto a janela estiver aberta
             self.withdraw()
 
-            win = RelatoriosUI(operador=self.display_name, role=self.role)
+            #win = RelatoriosUI(operador=self.display_name, role=self.role)
+            win = RelatoriosUI(display_name=self.display_name, role=self.role)
             win.transient(self)  
             win.grab_set()
 

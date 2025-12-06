@@ -4,63 +4,69 @@ import sys
 import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
+import subprocess
 
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from tkinter import messagebox, filedialog
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Garante que a raiz do projeto esteja no sys.path
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox, StringVar, DoubleVar, IntVar, filedialog
+
+#### verificar conecção com o banco ###########
 from database.products_db import get_connection
 
 def brl(value):
     if value is None:
         return "0,00"
     return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+################################################
+
+
 
 
 class RelatoriosUI(ttk.Window):
-    def __init__(self, operador="Admin", role="admin"):
+    def __init__(self, display_name="Admin", role="admin"):
         super().__init__(themename="superhero")
-
-        self.operador = operador
-        self.role = role
-
         self.title("📊 Relatórios - Açaiteria o Sabor da Fruta")
         self.geometry("900x600")
         self.minsize(900,600)
-
         self._build_ui()
+# #### verificar a chamada para a função #self._carregar_produtos()
+      
 
     def _build_ui(self):
-        container = ttk.Frame(self, padding=10)
-        container.pack(fill="both", expand=True)
-
-        header = ttk.Label(container, text="Relatórios de Vendas", font=("Segoe UI",18,"bold"))
+        header = ttk.Label(self, text="Relatórios de Vendas", font=("Segoe UI", 16, "bold"))
         header.pack(pady=10)
+        
+        frm = ttk.Frame(self)
+        frm.pack(fill=X, padx=12)
 
-        options = ttk.Labelframe(container, text="Selecione o relatório", padding=10)
+        options = ttk.Labelframe(frm, text="Selecione o relatório", padding=10)
         options.pack(fill=X)
 
-        ttk.Button(options, text="📅 Vendas de Hoje", bootstyle=PRIMARY, width=25,
-                   command=self.relatorio_diario).grid(row=0, column=0, padx=8, pady=5)
+        btns = ttk.Frame(self)
+        btns.pack(fill=X, pady=8, padx=6)
 
-        ttk.Button(options, text="📆 Últimos 7 dias", bootstyle=PRIMARY, width=25,
-                   command=self.relatorio_semanal).grid(row=0, column=1, padx=8, pady=5)
+        ttk.Button(btns, text="📅 Vendas de Hoje", bootstyle=PRIMARY, width=25,
+           command=self.relatorio_diario).pack(side=LEFT, padx=8, pady=5)
 
-        ttk.Button(options, text="🗓 Vendas do Mês", bootstyle=PRIMARY, width=25,
-                   command=self.relatorio_mensal).grid(row=1, column=0, padx=8, pady=5)
+        ttk.Button(btns, text="📆 Últimos 7 dias", bootstyle=PRIMARY, width=25,
+           command=self.relatorio_semanal).pack(side=LEFT, padx=8, pady=5)
 
-        ttk.Button(options, text="🍦 Produtos mais vendidos", bootstyle=WARNING, width=25,
-                   command=self.relatorio_produtos).grid(row=1, column=1, padx=8, pady=5)
+        ttk.Button(btns, text="🗓 Vendas do Mês", bootstyle=PRIMARY, width=25,
+           command=self.relatorio_mensal).pack(side=LEFT, padx=8, pady=5)
 
-        ttk.Button(options, text="⬇ Exportar para Excel", bootstyle=INFO, width=25,
-                   command=self.exportar_excel).grid(row=2, column=0, columnspan=2, pady=8)
+        ttk.Button(btns, text="🍦 Produtos mais vendidos", bootstyle=WARNING, width=25,
+           command=self.relatorio_produtos).pack(side=LEFT, padx=8, pady=5)
+
+        ttk.Button(btns, text="⬇ Exportar para Excel", bootstyle=INFO, width=25,
+           command=self.exportar_excel).pack(side=LEFT, padx=8, pady=5)
 
         # tabela
-        frame_table = ttk.Frame(container)
+        frame_table = ttk.Frame(frm)
         frame_table.pack(fill=BOTH, expand=True, pady=10)
 
         cols = ("id","data","produto","qtd","peso","subtotal","operador")
@@ -82,7 +88,7 @@ class RelatoriosUI(ttk.Window):
         scroll.pack(side=RIGHT, fill=Y)
 
         # footer com botão Voltar alinhado à direita, abaixo da tabela
-        footer = ttk.Frame(container)
+        footer = ttk.Frame(frm)
         footer.pack(fill=X, pady=(8,15))
         btn_voltar = ttk.Button(footer, text="🔙 Voltar", bootstyle=INFO, command=self.voltar_dashboard)
         btn_voltar.pack(side=RIGHT, padx=10)
@@ -180,9 +186,19 @@ class RelatoriosUI(ttk.Window):
     # --------- Navegação / utilitários ----------
     def voltar_dashboard(self):
         """Ação ao clicar em Voltar — fecha esta janela (ajuste se houver dashboard)."""
+        dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
         try:
-            self.destroy()
+            subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
         except Exception:
-            self.withdraw()
+           # fallback simples caso Popen falhe, tenta chamar via os.system
+            os.system(f'"{sys.executable}" "{dashboard_script}" {self.display_name} {self.role}') 
+        # fecha apenas esta janela; o novo processo continua rodando
+          
+        self.destroy()
+
+if __name__ == "__main__":
+    app = RelatoriosUI("Admin", "admin")
+    app.mainloop()
+
 
 
