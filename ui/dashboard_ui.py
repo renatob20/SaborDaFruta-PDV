@@ -90,30 +90,10 @@ class DashboardUI(ttk.Window):
                           self.display_name, self.role])
 
     def abrir_relatorios(self):
-        try:
-        # import local para evitar erro de import circular
-            from ui.relatorios_ui import RelatoriosUI
-
-        # Oculta o dashboard enquanto a janela estiver aberta
-            self.withdraw()
-
-            #win = RelatoriosUI(operador=self.display_name, role=self.role)
-            win = RelatoriosUI(display_name=self.display_name, role=self.role)
-            win.transient(self)  
-            win.grab_set()
-
-            def _on_close():
-                try:
-                    win.grab_release()
-                    win.destroy()
-                finally:
-                    self.deiconify()
-
-            win.protocol("WM_DELETE_WINDOW", _on_close)
-            self.wait_window(win)
-
-        except Exception as e:
-            messagebox.showerror("Erro", f"Não foi possível abrir Relatórios:\n{e}")
+        """Abre o módulo de relatórios sem quebrar o contexto da janela."""
+        self.destroy()
+        subprocess.Popen([sys.executable, "ui/relatorios_ui.py",
+                          self.display_name, self.role])
 
 
     def bater_ponto(self):

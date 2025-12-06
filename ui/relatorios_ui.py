@@ -33,6 +33,11 @@ class RelatoriosUI(ttk.Window):
         self.title("📊 Relatórios - Açaiteria o Sabor da Fruta")
         self.geometry("900x600")
         self.minsize(900,600)
+        
+        self.display_name = display_name
+        self.role = role
+        
+        
         self._build_ui()
 # #### verificar a chamada para a função #self._carregar_produtos()
       
