@@ -3,15 +3,19 @@ import os
 import sys
 import sqlite3
 from datetime import datetime
-
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from tkinter import messagebox, StringVar, IntVar
+import subprocess
 
 # Garante que a raiz do projeto esteja no sys.path
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+  
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox, StringVar, IntVar, DoubleVar
+
+
 
 # tenta usar get_connection do seu módulo database/products_db.py ou database/db.py
 try:
@@ -56,18 +60,17 @@ def ensure_estoque_tables():
 
 # ---------------- UI: EstoqueUI ----------------
 class EstoqueUI(ttk.Window):
-    def __init__(self, master=None, operador="Operador", role="operador"):
+    def __init__(self, display_name="Admin", role="admin"):
         super().__init__(themename="superhero")
-        self.master = master
-        self.operador = operador
+        self.title("📦 Gestão de Estoque - Açaiteria")
+        self.geometry("900x600")
+        self.minsize(900,600)
+        
+        self.display_name = display_name
         self.role = role
 
-        self.title("📦 Gestão de Estoque - Açaiteria")
-        try:
-            self.state("zoomed")
-        except Exception:
-            pass
-        self.minsize(900, 600)
+        
+        self._build_ui()
 
         # dados locais
         self.produtos_cache = {}  # chave (display) -> dict {id,nome,tipo,sabor,preco,estoque}
@@ -82,7 +85,7 @@ class EstoqueUI(ttk.Window):
         header = ttk.Frame(self, padding=10)
         header.pack(fill=X)
         ttk.Label(header, text="Gestão de Estoque", font=("Segoe UI", 16, "bold")).pack(side=LEFT)
-        ttk.Label(header, text=f"Operador: {self.operador}", font=("Segoe UI", 10)).pack(side=RIGHT)
+        #ttk.Label(header, text=f"Admin: {self.admin}", font=("Segoe UI", 10)).pack(side=RIGHT)
 
         main = ttk.Frame(self, padding=10)
         main.pack(fill=BOTH, expand=True)
@@ -297,23 +300,17 @@ class EstoqueUI(ttk.Window):
 
     # ---------------- voltar ao dashboard ----------------
     def voltar_dashboard(self):
+        """Ação ao clicar em Voltar — fecha esta janela (ajuste se houver dashboard)."""
+        dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
         try:
-            if self.master:
-                try:
-                    self.master.deiconify()
-                    self.destroy()
-                    return
-                except Exception:
-                    pass
-            dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
-            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.operador}" "{self.role}"')
-        finally:
-            try:
-                self.destroy()
-            except Exception:
-                pass
-
+            subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
+        except Exception:
+           # fallback simples caso Popen falhe, tenta chamar via os.system
+            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"') 
+        # fecha apenas esta janela; o novo processo continua rodando
+          
+        self.destroy()
 # execução direta para testes
 if __name__ == "__main__":
-    app = EstoqueUI(operador="Teste", role="admin")
+    app = EstoqueUI("Admin", "admin")
     app.mainloop()

@@ -110,26 +110,10 @@ class DashboardUI(ttk.Window):
 
 
     def abrir_estoque(self):
-        try:
-            from ui.estoque_ui import EstoqueUI
-
-            self.withdraw()  # Oculta o dashboard
-
-            janela = EstoqueUI(master=self, operador=self.operador, role=self.role)
-            janela.transient(self)
-            janela.grab_set()
-
-        # Quando a janela for fechada → volta o dashboard
-            def voltar():
-                janela.grab_release()
-                janela.destroy()
-                self.deiconify()
-
-            janela.protocol("WM_DELETE_WINDOW", voltar)
-            self.wait_window(janela)
-
-        except Exception as e:
-            messagebox.showerror("Erro", f"Não foi possível abrir o módulo de estoque:\n{e}")
+        """Abre o módulo de estoque sem quebrar o contexto da janela."""
+        self.destroy()
+        subprocess.Popen([sys.executable, "ui/estoque_ui.py",
+                          self.display_name, self.role])
 
 
 

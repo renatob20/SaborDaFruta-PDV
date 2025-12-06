@@ -196,7 +196,7 @@ class RelatoriosUI(ttk.Window):
             subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
         except Exception:
            # fallback simples caso Popen falhe, tenta chamar via os.system
-            os.system(f'"{sys.executable}" "{dashboard_script}" {self.display_name} {self.role}') 
+            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"') 
         # fecha apenas esta janela; o novo processo continua rodando
           
         self.destroy()

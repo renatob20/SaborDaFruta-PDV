@@ -35,23 +35,13 @@ Comecarei a atuar nessa tela com a branch de feature/vendas
         - Alinhar os itens cadastrados na tabela, centralizar as informaçoes de cada coluna
 
   
-  6   --  em ajuste
+  6   --  OK
   - Relatórios:
-    - Abre a tela Nova com a mensagem de erro: Não foi possível abrir Relatórios: settings ',' as master creates a transient/master cycle
-    - Ao clicar em voltar, apresenta o erro
-    Traceback (most recent call last):
-  File "C:\Users\renat\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
-    return self.func(*args)
-           ^^^^^^^^^^^^^^^^
-  File "C:\Users\renat\OneDrive\Documentos\Acaiteria O sabor da fruta\SaborDaFruta-PDV\ui\relatorios_ui.py", line 194, in voltar_dashboard
-    os.system(f'"{sys.executable}" "{dashboard_script}" {self.display_name} {self.role}')
-                                                        ^^^^^^^^^^^^^^^^^
-  File "C:\Users\renat\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2433, in __getattr__
-    return getattr(self.tk, attr)
-           ^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: '_tkinter.tkapp' object has no attribute 'display_name'
-   
+  - Ajustar layout posição dos botões
+
+7  - --- OK
 - Estoque:
   - Abre a tela antiga com a emnsagem de erro: Não foi possível abrir o modulo de Estoque: sttings ',' as master creates a transient/master cycle
+  
   - Na tela de histórico de movimentações, retirar a hora da coluna data
 
