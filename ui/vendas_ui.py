@@ -359,7 +359,7 @@ class VendasUI(ttk.Window):
             try:
                 if self.sync.check_change('produtos'):
                     print("📦 Produtos atualizados! Recarregando...")
-                    self._carregar_produtos()
+                    self._load_produtos()
             except Exception as e:
                 print(f"⚠️ Erro ao verificar mudanças: {e}")
     
