@@ -359,7 +359,19 @@ class VendasUI(ttk.Window):
             try:
                 if self.sync.check_change('produtos'):
                     print("📦 Produtos atualizados! Recarregando...")
+
+                    # Salva o tipo selecionado atual
+                    tipo_atual = self.tipo_cb.get()
+
                     self._load_produtos()
+
+                    # Se havia um tipo selecionado, reaplica a filtragem
+                    if tipo_atual:
+                        self.tipo_cb.set(tipo_atual)
+                        self._on_tipo_selected()  # ← Atualiza combo de produtos
+                        print(f"✅ Produtos do tipo '{tipo_atual}' atualizados!")
+
+
             except Exception as e:
                 print(f"⚠️ Erro ao verificar mudanças: {e}")
     
