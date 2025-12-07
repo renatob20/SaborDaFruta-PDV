@@ -72,11 +72,9 @@ class DashboardUI(ttk.Window):
 
     def abrir_vendas(self):
         """Abre o módulo de vendas como aplicação independente (subprocess)."""
-        try:
-            subprocess.Popen([sys.executable, "ui/vendas_ui.py", self.display_name, self.role])
-        except Exception as e:
-            logging.exception("Erro ao abrir Vendas:")
-            messagebox.showerror("Erro", f"Não foi possível abrir Vendas: {e}")
+        self.destroy()
+        subprocess.Popen([sys.executable, "ui/vendas_ui.py",
+                          self.display_name, self.role])
 
     def abrir_produtos(self):
         """Abre o módulo de produtos sem quebrar o contexto da janela."""

@@ -5,6 +5,7 @@ import sqlite3
 import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import subprocess
 
 # GUI
 import ttkbootstrap as ttk
@@ -15,6 +16,11 @@ from tkinter import messagebox, StringVar
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+
+# ============ ADICIONAR ESTA LINHA ============
+from utils.data_sync import SimpleFlagSync
+# ==============================================
 
 # use a função de conexão do módulo de products (mesmo DB_PATH)
 from database.products_db import get_connection
@@ -117,15 +123,27 @@ def ensure_tables():
 # ---------- Fim PARTE A ----------
 
 # ---------- PARTE B: UI builder (layout) ----------
-class VendasUI(ttk.Toplevel):
-    def __init__(self, master=None, operador=None, role="operador"):
-        super().__init__(master=master)
-        
-        self.master = master
-        self.operador = operador
+class VendasUI(ttk.Window):
+    def __init__(self, display_name="Admin", role="admin"):
+        super().__init__(themename="superhero")
+    
+    # ===== PRIMEIRO: Define atributos =====
+        self.display_name = display_name
         self.role = role
-
-        # tenta abrir maximizado se possível
+        self.operador = display_name  # Alias para compatibilidade
+        self.sync = SimpleFlagSync()
+    
+    # ===== SEGUNDO: Inicializa dados =====
+        self.produtos = []          # lista de rows (id, nome, tipo, sabor, preco, estoque)
+        self.produtos_cache = {}    # chave exibida -> dict {id,nome,tipo,sabor,preco,estoque}
+        self.carrinho = []          # lista de itens dict
+        self.total = 0.0
+    
+    # ===== TERCEIRO: Configurações da janela =====
+        self.title(f"📋 Vendas - {self.operador}")
+        self.minsize(1000, 640)
+    
+    # Tenta abrir maximizado se possível
         try:
             self.state("zoomed")
         except Exception:
@@ -133,23 +151,23 @@ class VendasUI(ttk.Toplevel):
                 self.attributes("-zoomed", True)
             except Exception:
                 pass
-
-        self.title(f"📋 Vendas - {self.operador}")
-        self.minsize(1000, 640)
-
-        # dados
-        self.produtos = []          # lista de rows (id, nome, tipo, sabor, preco, estoque)
-        self.produtos_cache = {}    # chave exibida -> dict {id,nome,tipo,sabor,preco,estoque}
-        self.carrinho = []          # lista de itens dict
-        self.total = 0.0
-
-        # garante tabelas relacionadas a vendas
+    
+    # ===== QUARTO: Garante tabelas =====
         ensure_tables()
-
-        # UI
+    
+    # ===== QUINTO: Constrói interface =====
         self._build_ui()
-        self._load_produtos()            # carrega produtos para os combos
-        self._carregar_vendas_recentes() # lista ultimas vendas
+    
+    # ===== SEXTO: Carrega dados =====
+        self._load_produtos()            # ← NOME CORRETO
+        self._carregar_vendas_recentes()
+    
+    # ===== SÉTIMO: Inicia monitoramento =====
+        self._iniciar_monitoramento()
+        print("🔄 Monitoramento de produtos iniciado")
+    
+        # ===================================
+
 
     def _build_ui(self):
         container = ttk.Frame(self, padding=10)
@@ -159,7 +177,7 @@ class VendasUI(ttk.Toplevel):
         header = ttk.Frame(container)
         header.pack(fill=X, pady=(0, 8))
         ttk.Label(header, text="Registrar Venda", font=("Segoe UI", 16, "bold")).pack(side=LEFT)
-        ttk.Label(header, text=f"Operador: {self.operador}", font=("Segoe UI", 10)).pack(side=RIGHT)
+        #ttk.Label(header, text=f"Operador: {self.operador}", font=("Segoe UI", 10)).pack(side=RIGHT)
 
         main = ttk.Frame(container)
         main.pack(fill=BOTH, expand=True)
@@ -333,6 +351,20 @@ class VendasUI(ttk.Toplevel):
         except Exception as e:
             logging.exception("Erro ao carregar produtos:")
             messagebox.showerror("Erro", f"Falha ao carregar produtos: {e}")
+
+
+
+    def _iniciar_monitoramento(self):
+            """Verifica mudanças na tabela de produtos a cada 5 segundos"""
+            try:
+                if self.sync.check_change('produtos'):
+                    print("📦 Produtos atualizados! Recarregando...")
+                    self._carregar_produtos()
+            except Exception as e:
+                print(f"⚠️ Erro ao verificar mudanças: {e}")
+    
+            self.after(5000, self._iniciar_monitoramento)   
+
 
     # ---------------- evento tipo selecionado ----------------
     def _on_tipo_selected(self):
@@ -574,6 +606,8 @@ class VendasUI(ttk.Toplevel):
             conn = get_connection()
             cur = conn.cursor()
             
+
+
             timestamp = datetime.now().isoformat(sep=" ")
             
             # INSERT com TODOS os campos obrigatórios
@@ -626,6 +660,12 @@ class VendasUI(ttk.Toplevel):
                 ))
             
             conn.commit()
+
+            # ===== ADICIONAR ESTAS 2 LINHAS =====
+            self.sync.notify_change('produtos')
+            print("✅ Estoque atualizado")
+            # ====================================
+    
             conn.close()
             
             messagebox.showinfo(
@@ -677,51 +717,42 @@ class VendasUI(ttk.Toplevel):
 
     # ---------------- voltar ao dashboard ----------------
     def voltar_dashboard(self):
-        """
-        Se a janela de Vendas foi aberta como janela filha (master é o dashboard que foi withdraw()),
-        mostramos (deiconify) o master e fechamos esta janela. Caso contrário, abrimos o dashboard em subprocess
-        (fallback) e destruímos esta janela.
-        """
+        # chama o dashboard em um processo separado e fecha esta janela
+        dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
         try:
-            # Se master existe e é válido, tira do withdraw
-            if self.master is not None:
-                try:
-                    self.master.deiconify()
-                except Exception:
-                    pass
+            subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
         except Exception:
-            pass
-        finally:
-            # Sempre fecha a janela de vendas
-            try:
-                self.destroy()
-            except Exception:
-                pass
-
-  
+            # fallback simples caso Popen falhe, tenta chamar via os.system
+            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"')
+        # fecha apenas esta janela; o novo processo continua rodando
+        self.destroy()
 
 # ---------- Fim PARTE C ----------
+if __name__ == "__main__":
+    app = VendasUI("Admin", "admin")
+    app.mainloop()
+
 
 #execução direta para testes
-if __name__ == "__main__":
-    import sys
+# if __name__ == "__main__":
+#     import sys
     
-    # obtém argumentos passados via linha de comando (do dashboard)
-    operador = sys.argv[1] if len(sys.argv) > 1 else "Operador"
-    role = sys.argv[2] if len(sys.argv) > 2 else "operador"
+#     # obtém argumentos passados via linha de comando (do dashboard)
+#     operador = sys.argv[1] if len(sys.argv) > 1 else "Operador"
+#     role = sys.argv[2] if len(sys.argv) > 2 else "operador"
     
-    # cria janela root (mainloop próprio)
-    root = ttk.Window(themename="superhero")
-    root.withdraw()  # oculta a root invisível
+#     # cria janela root (mainloop próprio)
+#     root = ttk.Window(themename="superhero")
+#     root.withdraw()  # oculta a root invisível
     
-    # cria janela de vendas como filha
-    win = VendasUI(master=root, operador=operador, role=role)
-    #win.transient(root)
+#     # cria janela de vendas como filha
+#     win = VendasUI(master=root, operador=operador, role=role)
+#     #win.transient(root)
     
-    def on_close():
-        win.destroy()
-        root.destroy()
+#     def on_close():
+#         win.destroy()
+#         root.destroy()
     
-    win.protocol("WM_DELETE_WINDOW", on_close)
-    #root.deiconify()
-    root.mainloop()
+#     win.protocol("WM_DELETE_WINDOW", on_close)
+#     #root.deiconify()
+#     root.mainloop()

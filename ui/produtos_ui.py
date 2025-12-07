@@ -8,6 +8,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+
+# ============ ADICIONAR ESTA LINHA ============
+from utils.data_sync import SimpleFlagSync
+# ==============================================
+
+
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, StringVar, DoubleVar, IntVar
@@ -29,6 +35,10 @@ class ProdutosUI(ttk.Window):
 
         # inicializa tabela no banco (se necessário)
         criar_tabela_produtos()
+
+        # ============ ADICIONAR ESTA LINHA ============
+        self.sync = SimpleFlagSync()
+        # ==============================================
 
         # variáveis
         self.display_name = display_name
@@ -134,6 +144,13 @@ class ProdutosUI(ttk.Window):
             else:
                 inserir_produto(tipo, sabor, preco_val, estoque_val)
                 messagebox.showinfo("Sucesso", "Produto cadastrado.")
+
+                # ============ ADICIONAR ESTAS 2 LINHAS AQUI ============
+                self.sync.notify_change('produtos')
+                print("✅ Notificação enviada: produtos atualizados")
+                # ========================================================# 
+
+
             self._limpar_campos()
             self._carregar_produtos()
         except Exception as e:
@@ -155,6 +172,15 @@ class ProdutosUI(ttk.Window):
                 messagebox.showinfo("Sucesso", "Produto excluído.")
                 self._limpar_campos()
                 self._carregar_produtos()
+
+                # ===== ADICIONAR ESTAS 2 LINHAS =====
+                self.sync.notify_change('produtos')
+                print("✅ Notificação enviada: produto excluído")
+                # ====================================
+    
+                messagebox.showinfo("Sucesso", "Produto excluído com sucesso!")
+
+
             except Exception as e:
                 messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
