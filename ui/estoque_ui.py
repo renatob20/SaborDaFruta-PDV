@@ -19,7 +19,7 @@ from tkinter import messagebox, StringVar, IntVar, DoubleVar
 
 # tenta usar get_connection do seu módulo database/products_db.py ou database/db.py
 try:
-    from database.products_db import get_connection
+    from database.db import get_connection
 except Exception:
     try:
         from database.db import get_connection

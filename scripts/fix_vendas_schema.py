@@ -5,7 +5,7 @@ import sqlite3
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from database.products_db import get_connection
+from database.db import get_connection
 
 print("=" * 70)
 print("FIX: Adicionando colunas faltantes à tabela vendas")

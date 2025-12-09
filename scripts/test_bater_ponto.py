@@ -14,7 +14,7 @@ print("=" * 70)
 # 1. Test get_connection
 print("\n1. Testando get_connection()...")
 try:
-    from database.products_db import get_connection
+    from database.db import get_connection
     conn = get_connection()
     print("   ✅ get_connection() OK — usando acaiteria.db")
     conn.close()

@@ -7,7 +7,7 @@ import csv
 
 # tenta usar a mesma conexão do módulo products_db (acaiteria.db)
 try:
-    from database.products_db import get_connection
+    from database.db import get_connection
 except Exception:
     # fallback mínimo
     def get_connection():

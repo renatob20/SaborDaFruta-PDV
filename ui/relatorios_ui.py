@@ -16,7 +16,7 @@ from ttkbootstrap.constants import *
 from tkinter import messagebox, StringVar, DoubleVar, IntVar, filedialog
 
 #### verificar conecção com o banco ###########
-from database.products_db import get_connection
+from database.db import get_connection
 
 def brl(value):
     if value is None:
