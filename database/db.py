@@ -22,6 +22,7 @@ def get_connection():
     """
     return sqlite3.connect(DB_PATH)
 
+
 def ensure_schema():
     """
     Garante que TODAS as tabelas existam.
@@ -75,25 +76,93 @@ def ensure_schema():
         print("✅ Coluna 'nome' adicionada e preenchida!")
 
     # ---------------------- TABELA VENDAS ----------------------
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS vendas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data_venda TEXT NOT NULL,
-            operador TEXT,
-            forma_pagamento TEXT,
-            valor_recebido REAL,
-            troco REAL,
-            total REAL DEFAULT 0.0
-        );
-    """)
-
-    # 🔧 Corrige coluna `total` se não existir
+    # Verifica se precisa recriar a tabela (se tiver coluna 'quantidade' errada)
     cur.execute("PRAGMA table_info(vendas)")
-    cols = [c[1] for c in cur.fetchall()]
-    if "total" not in cols:
-        print("🔄 Adicionando coluna 'total' na tabela vendas...")
-        cur.execute("ALTER TABLE vendas ADD COLUMN total REAL DEFAULT 0.0")
-        print("✅ Coluna 'total' adicionada!")
+    vendas_cols = [c[1] for c in cur.fetchall()]
+    
+    if "quantidade" in vendas_cols:
+        print("⚠️ Estrutura antiga detectada! Recriando tabela vendas...")
+        
+        # Salvar dados antigos
+        try:
+            cur.execute("""
+                SELECT id, data_venda, operador, forma_pagamento, 
+                       COALESCE(valor_recebido, 0.0), COALESCE(troco, 0.0), 
+                       COALESCE(total, 0.0), COALESCE(tipo_produto, 'Diversos')
+                FROM vendas
+            """)
+            old_data = cur.fetchall()
+        except:
+            old_data = []
+        
+        # Renomear tabela antiga
+        cur.execute("DROP TABLE IF EXISTS vendas_old")
+        cur.execute("ALTER TABLE vendas RENAME TO vendas_old")
+        
+        # Criar tabela nova com estrutura correta
+        cur.execute("""
+            CREATE TABLE vendas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo_produto TEXT,
+                data_venda TEXT NOT NULL,
+                operador TEXT,
+                forma_pagamento TEXT,
+                valor_recebido REAL DEFAULT 0.0,
+                troco REAL DEFAULT 0.0,
+                total REAL DEFAULT 0.0
+            );
+        """)
+        
+        # Restaurar dados
+        for row in old_data:
+            cur.execute("""
+                INSERT INTO vendas (id, data_venda, operador, forma_pagamento,
+                                  valor_recebido, troco, total, tipo_produto)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, row)
+        
+        # Remover tabela antiga
+        cur.execute("DROP TABLE vendas_old")
+        print("✅ Tabela vendas recriada com sucesso!")
+    
+    else:
+        # Criar tabela se não existir
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vendas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo_produto TEXT,
+                data_venda TEXT NOT NULL,
+                operador TEXT,
+                forma_pagamento TEXT,
+                valor_recebido REAL DEFAULT 0.0,
+                troco REAL DEFAULT 0.0,
+                total REAL DEFAULT 0.0
+            );
+        """)
+        
+        # Adicionar colunas faltantes se necessário
+        cur.execute("PRAGMA table_info(vendas)")
+        cols = [c[1] for c in cur.fetchall()]
+        
+        if "total" not in cols:
+            print("🔄 Adicionando coluna 'total' na tabela vendas...")
+            cur.execute("ALTER TABLE vendas ADD COLUMN total REAL DEFAULT 0.0")
+            print("✅ Coluna 'total' adicionada!")
+        
+        if "tipo_produto" not in cols:
+            print("🔄 Adicionando coluna 'tipo_produto' na tabela vendas...")
+            cur.execute("ALTER TABLE vendas ADD COLUMN tipo_produto TEXT")
+            print("✅ Coluna 'tipo_produto' adicionada!")
+        
+        if "valor_recebido" not in cols:
+            print("🔄 Adicionando coluna 'valor_recebido' na tabela vendas...")
+            cur.execute("ALTER TABLE vendas ADD COLUMN valor_recebido REAL DEFAULT 0.0")
+            print("✅ Coluna 'valor_recebido' adicionada!")
+        
+        if "troco" not in cols:
+            print("🔄 Adicionando coluna 'troco' na tabela vendas...")
+            cur.execute("ALTER TABLE vendas ADD COLUMN troco REAL DEFAULT 0.0")
+            print("✅ Coluna 'troco' adicionada!")
 
     # ---------------------- ITENS DA VENDA ----------------------
     cur.execute("""
@@ -105,7 +174,7 @@ def ensure_schema():
             tipo TEXT,
             quantidade INTEGER,
             peso_kg REAL,
-            valor_unit REAL,
+            preco_unitario REAL,
             subtotal REAL,
             FOREIGN KEY(venda_id) REFERENCES vendas(id)
         );

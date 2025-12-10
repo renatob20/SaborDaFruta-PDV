@@ -5,6 +5,7 @@ import sqlite3
 import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import subprocess
 
 # GUI
 import ttkbootstrap as ttk
@@ -282,11 +283,21 @@ class VendasUI(ttk.Window):
         
         ttk.Label(recebido_frame, text="Valor Recebido", 
                  font=("Segoe UI", 11)).pack(side=LEFT, padx=10)
+        
         self.recebido_var = StringVar(value="0,00")
-        recebido_entry = ttk.Entry(recebido_frame, textvariable=self.recebido_var, 
+        
+        self.recebido_entry = ttk.Entry(recebido_frame, textvariable=self.recebido_var, 
                                    width=15, font=("Segoe UI", 12))
-        recebido_entry.pack(side=RIGHT, padx=10)
-        recebido_entry.bind("<KeyRelease>", lambda e: self._atualizar_troco())
+        
+        self.recebido_entry.pack(side=RIGHT, padx=10)
+
+        # Bind para eventos de foco e digitação
+        self.recebido_entry.bind("<FocusIn>", self._on_recebido_focus_in)
+        self.recebido_entry.bind("<FocusOut>", self._on_recebido_focus_out)
+        self.recebido_entry.bind("<KeyRelease>", self._on_recebido_key)
+
+        
+        #recebido_entry.bind("<KeyRelease>", lambda e: self._atualizar_troco())
         
         # TROCO
         troco_frame = ttk.Frame(col_right)
@@ -553,6 +564,65 @@ class VendasUI(ttk.Window):
         except:
             self.troco_var.set("R$ 0,00")
 
+  
+  
+    def _on_recebido_focus_in(self, event):
+        """Limpa campo ao clicar se estiver com valor padrão"""
+        valor = self.recebido_var.get()
+        if valor in ["0,00", "R$ 0,00"]:
+            self.recebido_var.set("")
+
+
+    def _on_recebido_focus_out(self, event):
+        """Formata valor ao sair do campo"""
+        valor = self.recebido_var.get().strip()
+        if not valor or valor == "":
+            self.recebido_var.set("0,00")
+        else:
+        # Já formata com a máscara
+            try:
+                valor_float = parse_brl_to_float(valor)
+                self.recebido_var.set(brl_format(valor_float))
+            except:
+                self.recebido_var.set("0,00")
+    
+        self._atualizar_troco()
+
+    def _on_recebido_key(self, event):
+        """Formata valor enquanto digita (apenas números)"""
+        # Ignora teclas especiais
+        if event.keysym in ['BackSpace', 'Delete', 'Left', 'Right', 'Home', 'End', 'Tab']:
+            self._atualizar_troco()
+            return
+    
+     # Pega apenas números do que foi digitado
+        valor = self.recebido_var.get()
+        apenas_numeros = ''.join(filter(str.isdigit, valor))
+    
+        if not apenas_numeros:
+            self.recebido_var.set("")
+            self._atualizar_troco()
+            return
+    
+     # Converte para centavos e formata
+        try:
+            centavos = int(apenas_numeros)
+            valor_float = centavos / 100.0
+        
+            # Formata como moeda (sem R$)
+            valor_formatado = f"{valor_float:.2f}".replace(".", ",")
+        
+            self.recebido_var.set(valor_formatado)
+        
+            # Posiciona cursor no final
+            self.recebido_entry.icursor(len(valor_formatado))
+        
+        except:
+            pass
+    
+        self._atualizar_troco()
+
+
     def _finalizar_venda(self):
         """Finaliza venda"""
         try:
@@ -592,8 +662,8 @@ class VendasUI(ttk.Window):
                 tipo_produto or "Diversos",
                 forma_pagamento,
                 total,
-                valor_recebido,
-                troco,
+                float(valor_recebido or 0.0),
+                float(troco or 0.0),
                 timestamp,
                 self.operador
             ))
@@ -665,19 +735,14 @@ class VendasUI(ttk.Window):
 
     def voltar_dashboard(self):
         """Volta para dashboard"""
+        dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
         try:
-            if self.master is not None:
-                try:
-                    self.master.deiconify()
-                except:
-                    pass
-        except:
-            pass
-        finally:
-            try:
-                self.destroy()
-            except:
-                pass
+            subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
+        except Exception:
+        # fallback simples caso Popen falhe
+            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"')
+    # fecha apenas esta janela; o novo processo continua rodando
+        self.destroy()
 
 
 if __name__ == "__main__":
