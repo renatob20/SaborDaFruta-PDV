@@ -77,7 +77,7 @@ class EstoqueUI(ttk.Window):
         self.selected_prod_key = None
 
         ensure_estoque_tables()
-        self._build_ui()
+        
         self._load_produtos()
         self._carregar_historico()
 
