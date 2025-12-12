@@ -67,6 +67,22 @@ class DashboardUI(ttk.Window):
 
         ttk.Button(self, text="🚪 Sair", bootstyle=DANGER,
                    command=self.sair).pack(pady=25)
+        
+
+
+        # ---------------------- Assinatura RBS Technology ----------------------
+        footer = ttk.Frame(self, padding=5)
+        footer.pack(side="bottom", fill="x")
+
+        ttk.Label(
+            footer,
+            text="▦ RBS Technology  —  Seu negócio, nossa tecnologia.",
+            font=("Segoe UI", 9),
+            anchor="center",
+            foreground="#CCCCCC"  # Cinza suave para ficar discreto
+        ).pack(pady=3)
+# ------------------------------------------------------------------------
+
 
     # ==== AÇÕES DO MENU ====
 
