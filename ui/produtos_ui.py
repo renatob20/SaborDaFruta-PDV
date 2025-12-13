@@ -30,6 +30,15 @@ from models.produto_model import (
 class ProdutosUI(ttk.Window):
     def __init__(self, display_name="Admin", role="admin"):
         super().__init__(themename="superhero")
+        
+        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
+        try:
+            self.state("zoomed")
+        except Exception:
+            # Fallback para sistemas Windows onde 'zoomed' não está disponível
+            # ou em casos muito específicos.
+            self.attributes("-zoomed", True)
+        
         self.title("📦 Cadastro de Produtos - Açaiteria")
         self.geometry("820x540")
 
@@ -53,17 +62,46 @@ class ProdutosUI(ttk.Window):
         self._carregar_produtos()
 
     def _build_ui(self):
-        header = ttk.Label(self, text="Gerenciamento de Produtos", font=("Segoe UI", 16, "bold"))
-        header.pack(pady=10)
+        # ========== HEADER COM BOTÃO VOLTAR NO TOPO ==========
+        header_frame = ttk.Frame(self, padding=10)
+        header_frame.pack(fill=X)
+        
+        ttk.Label(header_frame, text="Gerenciamento de Produtos", font=("Segoe UI", 14, "bold")).pack(side=LEFT)
+        
+        ttk.Button(header_frame, text="🔙 Voltar ao Menu", bootstyle="info", width=20, 
+                   command=self.voltar_dashboard).pack(side=RIGHT, padx=5)
+        # ======================================================
 
-        frm = ttk.Frame(self)
+        frm = ttk.Frame(self, padding=10)
         frm.pack(fill=X, padx=12)
 
+        # ========== CAMPO TIPO COM PLACEHOLDER INTERNO ==========
         ttk.Label(frm, text="Tipo:").grid(row=0, column=0, sticky=W, padx=6, pady=6)
-        ttk.Combobox(frm, textvariable=self.nome_tipo, values=["Picolé", "Sorvete", "Copo 300ml", "Outros"], width=30).grid(row=0, column=1, sticky=W)
+        self.tipo_entry = ttk.Entry(frm, textvariable=self.nome_tipo, width=32)
+        self.tipo_entry.grid(row=0, column=1, sticky=W, padx=6)
+        
+        # Placeholder com bind para remover ao focar
+        self.tipo_placeholder = "Ex: Picolé, Sorvete, Bebida, etc."
+        if not self.nome_tipo.get():
+            self.nome_tipo.set(self.tipo_placeholder)
+            self.tipo_entry.config(foreground='gray')
+        
+        def on_tipo_focus_in(event):
+            if self.nome_tipo.get() == self.tipo_placeholder:
+                self.nome_tipo.set('')
+                self.tipo_entry.config(foreground='white')
+        
+        def on_tipo_focus_out(event):
+            if not self.nome_tipo.get():
+                self.nome_tipo.set(self.tipo_placeholder)
+                self.tipo_entry.config(foreground='gray')
+        
+        self.tipo_entry.bind('<FocusIn>', on_tipo_focus_in)
+        self.tipo_entry.bind('<FocusOut>', on_tipo_focus_out)
+        # ========================================================
 
         ttk.Label(frm, text="Sabor:").grid(row=1, column=0, sticky=W, padx=6, pady=6)
-        ttk.Entry(frm, textvariable=self.sabor, width=32).grid(row=1, column=1, sticky=W)
+        ttk.Entry(frm, textvariable=self.sabor, width=32).grid(row=1, column=1, sticky=W, padx=6, pady=6)
 
         ttk.Label(frm, text="Preço (R$):").grid(row=0, column=2, sticky=W, padx=6, pady=6)
         ttk.Entry(frm, textvariable=self.preco, width=12).grid(row=0, column=3, sticky=W)
@@ -76,7 +114,7 @@ class ProdutosUI(ttk.Window):
         ttk.Button(btns, text="💾 Cadastrar", bootstyle=SUCCESS, command=self.salvar_produto).pack(side=LEFT, padx=6)
         ttk.Button(btns, text="✏️ Editar", bootstyle=INFO, command=self.iniciar_edicao).pack(side=LEFT, padx=6)
         ttk.Button(btns, text="🗑️ Excluir", bootstyle=DANGER, command=self.excluir_produto).pack(side=LEFT, padx=6)
-        ttk.Button(btns, text="🔙 Voltar", bootstyle=SECONDARY, command=self.voltar_dashboard).pack(side=RIGHT, padx=6)
+        ttk.Button(btns, text="🔄 Limpar Campos", bootstyle=SECONDARY, command=self._limpar_campos).pack(side=LEFT, padx=6)
 
         table_frame = ttk.Frame(self)
         table_frame.pack(fill=BOTH, expand=True, padx=12, pady=8)
@@ -113,8 +151,12 @@ class ProdutosUI(ttk.Window):
             return
         vals = self.tree.item(sel[0])["values"]
         self.selected_id = vals[0]
+        
+        # Limpa o placeholder antes de preencher
+        self.tipo_entry.config(foreground='white')
         self.nome_tipo.set(vals[1])
-        self.sabor.set(vals[2])
+        
+        self.sabor.set(vals[2] if vals[2] else "")  # Trata None/vazio
         # preço no tree vem com vírgula, converte para ponto
         preco_str = str(vals[3]).replace(",", ".")
         self.preco.set(preco_str)
@@ -126,10 +168,19 @@ class ProdutosUI(ttk.Window):
         preco = self.preco.get().strip().replace(",", ".")
         estoque = self.estoque.get().strip() or "0"
 
-        # validação
-        if not tipo or not sabor or not preco:
-            messagebox.showwarning("Validação", "Preencha Tipo, Sabor e Preço.")
+        # ========== VALIDAÇÃO MELHORADA COM PLACEHOLDER ==========
+        # Verifica se o tipo é o placeholder ou está vazio
+        if not tipo or tipo == self.tipo_placeholder:
+            messagebox.showwarning("Validação", "O campo 'Tipo' é obrigatório.")
             return
+        
+        if not preco:
+            messagebox.showwarning("Validação", "O campo 'Preço' é obrigatório.")
+            return
+        
+        # Sabor pode ser vazio (opcional)
+        # =========================================================
+
         try:
             preco_val = float(preco)
             estoque_val = int(estoque)
@@ -145,11 +196,10 @@ class ProdutosUI(ttk.Window):
                 inserir_produto(tipo, sabor, preco_val, estoque_val)
                 messagebox.showinfo("Sucesso", "Produto cadastrado.")
 
-                # ============ ADICIONAR ESTAS 2 LINHAS AQUI ============
-                self.sync.notify_change('produtos')
-                print("✅ Notificação enviada: produtos atualizados")
-                # ========================================================# 
-
+            # ============ NOTIFICAÇÃO DE MUDANÇA ============
+            self.sync.notify_change('produtos')
+            print("✅ Notificação enviada: produtos atualizados")
+            # ================================================
 
             self._limpar_campos()
             self._carregar_produtos()
@@ -160,7 +210,7 @@ class ProdutosUI(ttk.Window):
         if not self.selected_id:
             messagebox.showwarning("Seleção", "Selecione um produto na lista para editar.")
             return
-        messagebox.showinfo("Editar", "Altere os campos e clique em Salvar para confirmar a edição.")
+        messagebox.showinfo("Editar", "Altere os campos e clique em 'Cadastrar' para confirmar a edição.")
 
     def excluir_produto(self):
         if not self.selected_id:
@@ -169,24 +219,26 @@ class ProdutosUI(ttk.Window):
         if messagebox.askyesno("Confirmar", "Deseja excluir o produto selecionado?"):
             try:
                 excluir_produto(self.selected_id)
-                messagebox.showinfo("Sucesso", "Produto excluído.")
-                self._limpar_campos()
-                self._carregar_produtos()
-
-                # ===== ADICIONAR ESTAS 2 LINHAS =====
+                
+                # ===== NOTIFICAÇÃO DE MUDANÇA =====
                 self.sync.notify_change('produtos')
                 print("✅ Notificação enviada: produto excluído")
-                # ====================================
-    
+                # ==================================
+                
                 messagebox.showinfo("Sucesso", "Produto excluído com sucesso!")
-
+                self._limpar_campos()
+                self._carregar_produtos()
 
             except Exception as e:
                 messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
     def _limpar_campos(self):
         self.selected_id = None
-        self.nome_tipo.set("")
+        
+        # Restaura o placeholder no campo tipo
+        self.nome_tipo.set(self.tipo_placeholder)
+        self.tipo_entry.config(foreground='gray')
+        
         self.sabor.set("")
         self.preco.set("")
         self.estoque.set("")

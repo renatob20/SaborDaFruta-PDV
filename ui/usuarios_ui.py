@@ -13,6 +13,15 @@ from controllers.usuario_controller import cadastrar_usuario, listar_todos_usuar
 class UsuariosUI(ttk.Window):
     def __init__(self, display_name=None, role="admin"):
         super().__init__(themename="superhero")
+        
+        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
+        try:
+            self.state("zoomed")
+        except Exception:
+            # Fallback para sistemas Windows onde 'zoomed' não está disponível
+            # ou em casos muito específicos.
+            self.attributes("-zoomed", True)
+        
         self.title("👤 Gestão de Usuários")
         self.geometry("900x600")
         self.display_name = display_name

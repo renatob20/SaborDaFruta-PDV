@@ -30,12 +30,22 @@ from database.bater_ponto_db import (
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
-class BaterPontoUI(ttk.Toplevel):
-    """Janela Toplevel para registro de ponto."""
+# ========== AJUSTE: Classe modificada para Window em vez de Toplevel ==========
+class BaterPontoUI(ttk.Window):
+    """Janela independente para registro de ponto."""
 
-    def __init__(self, master=None, operador_display=None, role="operador"):
-        super().__init__(master=master)
-        self.master = master
+    def __init__(self, operador_display=None, role="operador"):
+        super().__init__(themename="superhero")
+        
+        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
+        try:
+            self.state("zoomed")
+        except Exception:
+            # Fallback para sistemas Windows onde 'zoomed' não está disponível
+            # ou em casos muito específicos.
+            self.attributes("-zoomed", True)
+        
+        
         self.operador_display = operador_display
         self.role = role
 
@@ -577,6 +587,7 @@ class BaterPontoUI(ttk.Toplevel):
             messagebox.showerror("Erro", f"Falha ao exportar PDF: {e}")
 
 
+# ========== EXECUÇÃO DIRETA (AJUSTADO - SEM JANELA EXTRA) ==========
 # Execução direta para teste
 if __name__ == "__main__":
     import sys
@@ -585,18 +596,6 @@ if __name__ == "__main__":
     operador_display = sys.argv[1] if len(sys.argv) > 1 else "Operador"
     role = sys.argv[2] if len(sys.argv) > 2 else "operador"
     
-    # cria janela root (mainloop próprio)
-    root = ttk.Window(themename="superhero")
-    root.withdraw()  # oculta a root invisível
-    
-    # cria janela de bater ponto como filha
-    win = BaterPontoUI(master=root, operador_display=operador_display, role=role)
-    win.transient(root)
-    
-    def on_close():
-        win.destroy()
-        root.destroy()
-    
-    win.protocol("WM_DELETE_WINDOW", on_close)
-    root.deiconify()
-    root.mainloop()
+    # Cria janela principal diretamente (sem root invisível)
+    app = BaterPontoUI(operador_display=operador_display, role=role)
+    app.mainloop()

@@ -29,6 +29,15 @@ def brl(value):
 class RelatoriosUI(ttk.Window):
     def __init__(self, display_name="Admin", role="admin"):
         super().__init__(themename="superhero")
+        
+        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
+        try:
+            self.state("zoomed")
+        except Exception:
+            # Fallback para sistemas Windows onde 'zoomed' não está disponível
+            # ou em casos muito específicos.
+            self.attributes("-zoomed", True)
+        
         self.title("📊 Relatórios - Açaiteria o Sabor da Fruta")
         self.geometry("1100x700")
         self.minsize(1100, 700)
@@ -50,7 +59,7 @@ class RelatoriosUI(ttk.Window):
         
         ttk.Label(header_frame, text="Relatórios de Vendas", font=("Segoe UI", 14, "bold")).pack(side=LEFT)
         
-        ttk.Button(header_frame, text="🔙 Voltar ao Dashboard", bootstyle="info", width=20, 
+        ttk.Button(header_frame, text="🔙 Voltar ao Menu", bootstyle="info", width=20, 
                    command=self.voltar_dashboard).pack(side=RIGHT, padx=5)
         # ===========================================================
         

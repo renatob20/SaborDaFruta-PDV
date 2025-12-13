@@ -4,6 +4,7 @@ import sys
 import sqlite3
 from datetime import datetime
 import subprocess
+import logging
 
 # Garante que a raiz do projeto esteja no sys.path
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -58,17 +59,33 @@ def ensure_estoque_tables():
     conn.commit()
     conn.close()
 
-# ---------------- UI: EstoqueUI ----------------
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
+
+# ========== AJUSTE: Classe modificada para Window independente ==========
 class EstoqueUI(ttk.Window):
-    def __init__(self, display_name="Admin", role="admin"):
+    """Janela independente para gestão de estoque."""
+    
+    def __init__(self, operador_display=None, role="operador"):
         super().__init__(themename="superhero")
-        self.title("📦 Gestão de Estoque - Açaiteria")
-        self.geometry("900x600")
-        self.minsize(900,600)
+        self.operador_display = operador_display
         
-        self.display_name = display_name
+        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
+        try:
+            self.state("zoomed")
+        except Exception:
+            # Fallback para sistemas Windows onde 'zoomed' não está disponível
+            # ou em casos muito específicos.
+            self.attributes("-zoomed", True)
+        
         self.role = role
 
+        self.title("📦 Gestão de Estoque - Açaiteria")
+        self.geometry("900x600")
+        self.minsize(900, 600)
+        
+        # ========== CORRIGIDO: Usar operador_display em vez de display_name ==========
+        self.operador = operador_display or "Admin"
         
         self._build_ui()
 
@@ -82,19 +99,24 @@ class EstoqueUI(ttk.Window):
         self._carregar_historico()
 
     def _build_ui(self):
-        header = ttk.Frame(self, padding=10)
-        header.pack(fill=X)
-        ttk.Label(header, text="Gestão de Estoque", font=("Segoe UI", 16, "bold")).pack(side=LEFT)
-        #ttk.Label(header, text=f"Admin: {self.admin}", font=("Segoe UI", 10)).pack(side=RIGHT)
+        # ========== HEADER COM BOTÃO VOLTAR NO TOPO ==========
+        header_frame = ttk.Frame(self, padding=10)
+        header_frame.pack(fill=X)
+        
+        ttk.Label(header_frame, text="Gestão de Estoque", font=("Segoe UI", 14, "bold")).pack(side=LEFT)
+        
+        ttk.Button(header_frame, text="🔙 Voltar ao Menu", bootstyle="info", width=20, 
+                   command=self.voltar_dashboard).pack(side=RIGHT, padx=5)
+        # ======================================================
 
         main = ttk.Frame(self, padding=10)
         main.pack(fill=BOTH, expand=True)
 
         left = ttk.Frame(main)
-        left.pack(side=LEFT, fill=BOTH, expand=True, padx=(0,8))
+        left.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))
 
         frm = ttk.Labelframe(left, text="Registrar Movimentação", padding=10)
-        frm.pack(fill=X, pady=(0,8))
+        frm.pack(fill=X, pady=(0, 8))
 
         # Produto
         ttk.Label(frm, text="Produto:").grid(row=0, column=0, sticky=W, padx=6, pady=6)
@@ -131,20 +153,20 @@ class EstoqueUI(ttk.Window):
         btns.grid(row=5, column=0, columnspan=2, pady=10)
         ttk.Button(btns, text="💾 Registrar", bootstyle=SUCCESS, command=self.registrar_movimento).pack(side=LEFT, padx=6)
         ttk.Button(btns, text="🔄 Atualizar Produtos", bootstyle=SECONDARY, command=self._load_produtos).pack(side=LEFT, padx=6)
-        ttk.Button(btns, text="🔙 Voltar", bootstyle=INFO, command=self.voltar_dashboard).pack(side=RIGHT, padx=6)
 
         # Lista produtos (informativa)
         prod_frame = ttk.Labelframe(left, text="Produtos (estoque)", padding=8)
-        prod_frame.pack(fill=BOTH, expand=True, pady=(8,0))
-        cols = ("id","nome","tipo","sabor","preco","estoque")
+        prod_frame.pack(fill=BOTH, expand=True, pady=(8, 0))
+        cols = ("id", "nome", "tipo", "sabor", "preco", "estoque")
         self.tree_prod = ttk.Treeview(prod_frame, columns=cols, show="headings")
-        headings = {"id":"ID","nome":"Nome","tipo":"Tipo","sabor":"Sabor","preco":"Preço","estoque":"Estoque"}
+        headings = {"id": "ID", "nome": "Nome", "tipo": "Tipo", "sabor": "Sabor", "preco": "Preço", "estoque": "Estoque"}
         for c in cols:
             self.tree_prod.heading(c, text=headings[c])
-            self.tree_prod.column(c, anchor="center", width=100 if c=="id" else 140)
+            self.tree_prod.column(c, anchor="center", width=100 if c == "id" else 140)
         self.tree_prod.pack(fill=BOTH, expand=True, side=LEFT)
         sb = ttk.Scrollbar(prod_frame, orient="vertical", command=self.tree_prod.yview)
-        self.tree_prod.configure(yscroll=sb.set); sb.pack(side=RIGHT, fill=Y)
+        self.tree_prod.configure(yscroll=sb.set)
+        sb.pack(side=RIGHT, fill=Y)
         self.tree_prod.bind("<ButtonRelease-1>", self._on_tree_produto_select)
 
         # Right: histórico
@@ -154,15 +176,16 @@ class EstoqueUI(ttk.Window):
         hist_frame = ttk.Labelframe(right, text="Histórico de Movimentações", padding=8)
         hist_frame.pack(fill=BOTH, expand=True)
 
-        cols2 = ("id","data","produto","tipo","qtd","operador","nota")
+        cols2 = ("id", "data", "produto", "tipo", "qtd", "operador", "nota")
         self.tree_hist = ttk.Treeview(hist_frame, columns=cols2, show="headings")
-        headings2 = {"id":"ID","data":"Data","produto":"Produto","tipo":"Tipo","qtd":"Qtd","operador":"Operador","nota":"Nota"}
+        headings2 = {"id": "ID", "data": "Data", "produto": "Produto", "tipo": "Tipo", "qtd": "Qtd", "operador": "Operador", "nota": "Nota"}
         for c in cols2:
             self.tree_hist.heading(c, text=headings2[c])
-            self.tree_hist.column(c, anchor="center", width=110 if c=="id" else 140)
+            self.tree_hist.column(c, anchor="center", width=110 if c == "id" else 140)
         self.tree_hist.pack(fill=BOTH, expand=True, side=LEFT)
         sb2 = ttk.Scrollbar(hist_frame, orient="vertical", command=self.tree_hist.yview)
-        self.tree_hist.configure(yscroll=sb2.set); sb2.pack(side=RIGHT, fill=Y)
+        self.tree_hist.configure(yscroll=sb2.set)
+        sb2.pack(side=RIGHT, fill=Y)
 
     # ---------------- carrega produtos ----------------
     def _load_produtos(self):
@@ -211,7 +234,7 @@ class EstoqueUI(ttk.Window):
         vals = self.tree_prod.item(sel[0])["values"]
         pid = vals[0]
         # tentar selecionar no combo
-        key = next((k for k,v in self.produtos_cache.items() if v["id"] == pid), None)
+        key = next((k for k, v in self.produtos_cache.items() if v["id"] == pid), None)
         if key:
             self.combo_produto.set(key)
             self._on_produto_selected()
@@ -298,19 +321,29 @@ class EstoqueUI(ttk.Window):
         except Exception:
             pass
 
-    # ---------------- voltar ao dashboard ----------------
+    # ========== CORRIGIDO: Voltar ao dashboard ==========
     def voltar_dashboard(self):
-        """Ação ao clicar em Voltar — fecha esta janela (ajuste se houver dashboard)."""
+        """Fecha esta janela e abre o dashboard como subprocesso."""
         dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
         try:
-            subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
+            # Abre o dashboard em um novo processo
+            subprocess.Popen([sys.executable, dashboard_script, self.operador_display, self.role], close_fds=True)
         except Exception:
-           # fallback simples caso Popen falhe, tenta chamar via os.system
-            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"') 
-        # fecha apenas esta janela; o novo processo continua rodando
-          
+            # Fallback caso Popen falhe
+            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.operador_display}" "{self.role}"')
+        
+        # Fecha esta janela
         self.destroy()
-# execução direta para testes
+    # ====================================================
+
+# ========== EXECUÇÃO DIRETA (AJUSTADO - SEM JANELA EXTRA) ==========        
 if __name__ == "__main__":
-    app = EstoqueUI("Admin", "admin")
+    import sys
+    
+    # Obtém argumentos passados via linha de comando (do dashboard)
+    operador_display = sys.argv[1] if len(sys.argv) > 1 else "Admin"
+    role = sys.argv[2] if len(sys.argv) > 2 else "admin"
+    
+    # Cria janela principal diretamente (sem root invisível)
+    app = EstoqueUI(operador_display=operador_display, role=role)
     app.mainloop()

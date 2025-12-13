@@ -122,6 +122,15 @@ class VendasUI(ttk.Window):
     def __init__(self, display_name="Admin", role="admin"):
         super().__init__(themename="superhero")
         
+        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
+        try:
+            self.state("zoomed")
+        except Exception:
+            # Fallback para sistemas Windows onde 'zoomed' não está disponível
+            # ou em casos muito específicos.
+            self.attributes("-zoomed", True)
+
+
         # Atributos
         self.display_name = display_name
         self.role = role
@@ -315,7 +324,7 @@ class VendasUI(ttk.Window):
         
         ttk.Button(botoes_finais, text="✅ FINALIZAR VENDA", bootstyle=SUCCESS, 
                   command=self._finalizar_venda, width=20).pack(side=RIGHT, padx=5)
-        ttk.Button(botoes_finais, text="🔙 Voltar", bootstyle=INFO, 
+        ttk.Button(botoes_finais, text="🔙 Voltar ao Menu", bootstyle=INFO, 
                   command=self.voltar_dashboard, width=15).pack(side=RIGHT, padx=5)
 
     # ---------- PARTE C: Lógica (mantém os métodos atuais) ----------

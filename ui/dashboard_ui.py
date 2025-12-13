@@ -20,6 +20,15 @@ logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(mes
 class DashboardUI(ttk.Window):
     def __init__(self, display_name, role):
         super().__init__(themename="superhero")
+        
+        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
+        try:
+            self.state("zoomed")
+        except Exception:
+            # Fallback para sistemas Windows onde 'zoomed' não está disponível
+            # ou em casos muito específicos.
+            self.attributes("-zoomed", True)
+        
         self.title("🍧 Açaiteria o Sabor da Fruta - Painel Principal")
         self.geometry("600x450")
         self.display_name = display_name
