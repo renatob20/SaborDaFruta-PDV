@@ -194,5 +194,42 @@ def ensure_schema():
     conn.close()
 
 
+def criar_usuario_admin_padrao():
+    """
+    Cria um usuário admin padrão se não existir nenhum usuário.
+    """
+    import bcrypt
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    # Verifica se já existe algum usuário
+    cur.execute("SELECT COUNT(*) FROM usuarios")
+    count = cur.fetchone()[0]
+    
+    if count == 0:
+        print("👤 Criando usuário admin padrão...")
+        
+        # Hash da senha "1234"
+        senha_hash = bcrypt.hashpw("1234".encode('utf-8'), bcrypt.gensalt())
+        
+        cur.execute("""
+            INSERT INTO usuarios (display_name, username, senha, role)
+            VALUES (?, ?, ?, ?)
+        """, ("Administrador", "admin", senha_hash, "admin"))
+        
+        conn.commit()
+        print("✅ Usuário admin criado!")
+        print("   Username: admin")
+        print("   Senha: 1234")
+    
+    conn.close()
+
+
+# Executa a validação automaticamente ao importar o módulo
+
+
+
 # Executa a validação automaticamente ao importar o módulo
 ensure_schema()
+criar_usuario_admin_padrao()

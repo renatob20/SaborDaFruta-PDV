@@ -1,8 +1,9 @@
 import sqlite3
 import bcrypt
+from database.db import get_connection  # ← ADICIONAR
 
 def autenticar_usuario(usuario, senha):
-    conn = sqlite3.connect("database/db.sqlite3")
+    conn = get_connection()  # ← USAR A FUNÇÃO
     cursor = conn.cursor()
 
     cursor.execute("SELECT nome, senha, tipo FROM usuarios WHERE usuario = ?", (usuario,))

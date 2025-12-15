@@ -1,8 +1,9 @@
 import sqlite3
 from datetime import datetime
+from database.db import get_connection  # ← USAR A FUNÇÃO
 
 def registrar_venda(tipo_produto, sabor, quantidade, valor_unit, forma_pagamento, operador, observacoes=""):
-    conn = sqlite3.connect("database/db.sqlite3")
+    conn = get_connection()  # ← USAR A FUNÇÃO
     cursor = conn.cursor()
 
     valor_total = quantidade * valor_unit
