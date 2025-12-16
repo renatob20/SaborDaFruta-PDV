@@ -36,12 +36,33 @@ def ensure_schema():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome_completo TEXT NOT NULL,
+            cpf TEXT NOT NULL UNIQUE,
+            celular TEXT,
             display_name TEXT NOT NULL,
             username TEXT UNIQUE NOT NULL,
-            senha TEXT NOT NULL,
-            role TEXT DEFAULT 'operador'
+            senha BLOB NOT NULL,  -- ALTERADO PARA BLOB PARA ARMAZENAR HASHES
+            role TEXT DEFAULT 'operador',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP    
         );
     """)
+    # 🔧 MIGRATIONS AUTOMÁTICAS
+    cur.execute("PRAGMA table_info(usuarios)")
+    cols = [c[1] for c in cur.fetchall()]
+
+    def add_col(col, sql):
+        if col not in cols:
+            print(f"🔄 Adicionando coluna '{col}' em usuarios...")
+            cur.execute(sql)
+            print(f"✅ Coluna '{col}' adicionada!")
+
+    add_col("nome_completo", "ALTER TABLE usuarios ADD COLUMN nome_completo TEXT")
+    add_col("cpf", "ALTER TABLE usuarios ADD COLUMN cpf TEXT")
+    add_col("celular", "ALTER TABLE usuarios ADD COLUMN celular TEXT")
+    add_col("created_at", "ALTER TABLE usuarios ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+
+
 
     # ---------------------- TABELA PRODUTOS ----------------------
     cur.execute("""
@@ -214,9 +235,16 @@ def criar_usuario_admin_padrao():
         senha_hash = bcrypt.hashpw("1234".encode('utf-8'), bcrypt.gensalt())
         
         cur.execute("""
-            INSERT INTO usuarios (display_name, username, senha, role)
-            VALUES (?, ?, ?, ?)
-        """, ("Administrador", "admin", senha_hash, "admin"))
+            INSERT INTO usuarios (nome_completo, cpf, celular,
+                display_name, username, senha, role)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("Administrador do Sistema",
+            "00000000000",
+            "00000000000",
+            "Administrador",
+            "admin",
+            "senha_hash",
+            "admin"))
         
         conn.commit()
         print("✅ Usuário admin criado!")

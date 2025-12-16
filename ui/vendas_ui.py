@@ -1,4 +1,4 @@
-# ---------- PARTE A: imports, helpers, ensure_tables ----------
+# ---------- IMPORTS ----------
 import os
 import sys
 import sqlite3
@@ -7,13 +7,12 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import subprocess
 
-
 # GUI
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, StringVar
 
-# garante que imports relativos funcionem quando executado diretamente
+# garante que imports relativos funcionem
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -21,9 +20,17 @@ if ROOT not in sys.path:
 from utils.data_sync import SimpleFlagSync
 from database.db import get_connection
 
+# Importação condicional da impressora
+try:
+    from utils.thermal_printer import ThermalPrinter
+    IMPRESSORA_DISPONIVEL = True
+except ImportError:
+    IMPRESSORA_DISPONIVEL = False
+    print("⚠️ Módulo de impressão não disponível")
+
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
 
-# ----------------- Helpers -----------------
+# ---------- FUNÇÕES AUXILIARES ----------
 def brl_format(value):
     """Formata float/Decimal -> '1.234,56' (BRL style)."""
     try:
@@ -45,35 +52,21 @@ def parse_brl_to_float(value):
         return 0.0
 
 def parse_peso_kg_input(text):
-    """
-    Aceita entradas:
-      - '0.100' → 0.100 kg
-      - '100' → 0.100 kg (interpreta como gramas)
-      - '100g' → 0.100 kg
-      - '0,100' → 0.100 kg
-    Retorna float em KG.
-    """
+    """Aceita '0.100', '100', '100g', '0,100' e retorna float em KG."""
     if not text:
         return 0.0
-
     s = str(text).strip().lower().replace(" ", "")
     if s.endswith("g"):
         s = s[:-1]
-
     s = s.replace(",", ".")
-
     try:
         val = float(s)
     except:
         return 0.0
-
-    # se usuário digitou GRAMAS (ex: 100 → 100g)
     if val >= 10:
         return val / 1000.0
-
     return val
 
-# ----------------- DB init -----------------
 def ensure_tables():
     conn = get_connection()
     cur = conn.cursor()
@@ -103,8 +96,6 @@ def ensure_tables():
             FOREIGN KEY(venda_id) REFERENCES vendas(id)
         );
     """)
-
-    # Verifica coluna 'total'
     cur.execute("PRAGMA table_info(vendas);")
     cols = [r[1] for r in cur.fetchall()]
     if "total" not in cols:
@@ -112,26 +103,14 @@ def ensure_tables():
             cur.execute("ALTER TABLE vendas ADD COLUMN total REAL DEFAULT 0.0;")
         except Exception:
             pass
-
     conn.commit()
     conn.close()
 
-# ---------- Fim PARTE A ----------
-
-# ---------- PARTE B: UI builder (NOVO LAYOUT ESTILO CUPOM) ----------
+# ---------- CLASSE PRINCIPAL ----------
 class VendasUI(ttk.Window):
     def __init__(self, display_name="Admin", role="admin"):
         super().__init__(themename="superhero")
         
-        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
-        try:
-            self.state("zoomed")
-        except Exception:
-            # Fallback para sistemas Windows onde 'zoomed' não está disponível
-            # ou em casos muito específicos.
-            self.attributes("-zoomed", True)
-
-
         # Atributos
         self.display_name = display_name
         self.role = role
@@ -141,6 +120,11 @@ class VendasUI(ttk.Window):
         self.produtos_cache = {}
         self.carrinho = []
         self.total = 0.0
+        
+        # Atributos para impressão
+        self.ultima_venda_id = None
+        self.ultima_venda_data = None
+        self.btn_imprimir = None
         
         # Janela
         self.title(f"📋 PDV - Vendas - {self.operador}")
@@ -212,12 +196,10 @@ class VendasUI(ttk.Window):
         cupom_frame = ttk.Labelframe(main_container, text="CUPOM DE VENDA", padding=10)
         cupom_frame.pack(fill=BOTH, expand=True, pady=(0, 10))
         
-        # Tabela com colunas do print (sem COD)
         cols = ("tipo", "sabor", "qtd", "peso", "valor_unit", "subtotal")
         self.tree_cart = ttk.Treeview(cupom_frame, columns=cols, show="headings", 
                                       selectmode="browse", height=12)
         
-        # Cabeçalhos
         headers = {
             "tipo": "TIPO PRODUTO",
             "sabor": "SABOR",
@@ -246,7 +228,6 @@ class VendasUI(ttk.Window):
         self.tree_cart.configure(yscroll=sb.set)
         sb.pack(side=RIGHT, fill=Y)
         
-        # Botões de ação do carrinho
         cart_btns = ttk.Frame(cupom_frame)
         cart_btns.pack(fill=X, pady=(8, 0))
         ttk.Button(cart_btns, text="🗑️ Remover Item", bootstyle=DANGER, 
@@ -258,7 +239,6 @@ class VendasUI(ttk.Window):
         pagamento_frame = ttk.Frame(main_container)
         pagamento_frame.pack(fill=X)
         
-        # Coluna esquerda: Forma de Pagamento
         col_left = ttk.Frame(pagamento_frame)
         col_left.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10))
         
@@ -272,11 +252,9 @@ class VendasUI(ttk.Window):
         self.forma_cb.pack(anchor=W)
         self.forma_cb.bind("<<ComboboxSelected>>", lambda e: self._on_forma_change())
         
-        # Coluna direita: Valores
         col_right = ttk.Frame(pagamento_frame)
         col_right.pack(side=RIGHT, fill=BOTH, expand=True)
         
-        # VALOR TOTAL (destaque verde como no print)
         total_frame = ttk.Frame(col_right, bootstyle=SUCCESS)
         total_frame.pack(fill=X, pady=3)
         
@@ -287,7 +265,6 @@ class VendasUI(ttk.Window):
                  font=("Segoe UI", 16, "bold"), 
                  bootstyle=SUCCESS).pack(side=RIGHT, padx=10)
         
-        # VALOR RECEBIDO
         recebido_frame = ttk.Frame(col_right)
         recebido_frame.pack(fill=X, pady=3)
         
@@ -295,21 +272,13 @@ class VendasUI(ttk.Window):
                  font=("Segoe UI", 11)).pack(side=LEFT, padx=10)
         
         self.recebido_var = StringVar(value="0,00")
-        
         self.recebido_entry = ttk.Entry(recebido_frame, textvariable=self.recebido_var, 
                                    width=15, font=("Segoe UI", 12))
-        
         self.recebido_entry.pack(side=RIGHT, padx=10)
-
-        # Bind para eventos de foco e digitação
         self.recebido_entry.bind("<FocusIn>", self._on_recebido_focus_in)
         self.recebido_entry.bind("<FocusOut>", self._on_recebido_focus_out)
         self.recebido_entry.bind("<KeyRelease>", self._on_recebido_key)
-
         
-        #recebido_entry.bind("<KeyRelease>", lambda e: self._atualizar_troco())
-        
-        # TROCO
         troco_frame = ttk.Frame(col_right)
         troco_frame.pack(fill=X, pady=3)
         
@@ -323,13 +292,22 @@ class VendasUI(ttk.Window):
         botoes_finais = ttk.Frame(main_container)
         botoes_finais.pack(fill=X, pady=(10, 0))
         
+        if IMPRESSORA_DISPONIVEL:
+            self.btn_imprimir = ttk.Button(
+                botoes_finais, 
+                text="🖨️ IMPRIMIR CUPOM", 
+                bootstyle="INFO",
+                command=self._imprimir_cupom, 
+                width=18,
+                state="disabled"
+            )
+            self.btn_imprimir.pack(side=RIGHT, padx=5)
+        
         ttk.Button(botoes_finais, text="✅ FINALIZAR VENDA", bootstyle=SUCCESS, 
                   command=self._finalizar_venda, width=20).pack(side=RIGHT, padx=5)
         ttk.Button(botoes_finais, text="🔙 Voltar ao Menu", bootstyle=INFO, 
                   command=self.voltar_dashboard, width=15).pack(side=RIGHT, padx=5)
 
-    # ---------- PARTE C: Lógica (mantém os métodos atuais) ----------
-    
     def _load_produtos(self):
         """Carrega produtos do banco"""
         try:
@@ -383,7 +361,7 @@ class VendasUI(ttk.Window):
         self.after(5000, self._iniciar_monitoramento)
 
     def _on_tipo_selected(self):
-        """Filtra produtos por tipo e mostra apenas o sabor"""
+        """Filtra produtos por tipo"""
         tipo = self.tipo_cb.get().strip()
         if not tipo:
             self.produto_cb.set("")
@@ -394,16 +372,13 @@ class VendasUI(ttk.Window):
         for key, info in self.produtos_cache.items():
             if (info.get('tipo') or "").strip() == tipo:
                 sabor = info.get('sabor', '').strip()
-                if sabor:
-                    display_name = sabor
-                else:
-                    display_name = info.get('nome', key)
+                display_name = sabor if sabor else info.get('nome', key)
                 values.append(display_name)
 
         values = sorted(values, key=lambda x: x.lower())
         self.produto_cb['values'] = values
 
-        if tipo.lower() == "sorvete" or tipo.lower() == "açaí/sorvete":
+        if tipo.lower() in ["sorvete", "açaí/sorvete"]:
             self.peso_entry.config(state="normal")
             self.qtd_entry.config(state="disabled")
             self.qtd_var.set("")
@@ -420,7 +395,7 @@ class VendasUI(ttk.Window):
             self.valor_unit_var.set("R$ 0,00")
 
     def _on_produto_selected(self):
-        """Atualiza valor unitário ao selecionar produto"""
+        """Atualiza valor unitário"""
         sabor_selecionado = self.produto_cb.get()
         if not sabor_selecionado:
             self.valor_unit_var.set("R$ 0,00")
@@ -432,19 +407,15 @@ class VendasUI(ttk.Window):
         for key, produto_info in self.produtos_cache.items():
             if produto_info.get('tipo') == tipo_atual:
                 sabor = produto_info.get('sabor', '').strip()
-                if sabor == sabor_selecionado:
-                    info = produto_info
-                    break
-                elif not sabor and produto_info.get('nome') == sabor_selecionado:
+                if sabor == sabor_selecionado or produto_info.get('nome') == sabor_selecionado:
                     info = produto_info
                     break
         
-        if not info:
+        if info:
+            preco = float(info.get("preco", 0.0))
+            self.valor_unit_var.set(f"R$ {brl_format(preco)}")
+        else:
             self.valor_unit_var.set("R$ 0,00")
-            return
-
-        preco = float(info.get("preco", 0.0))
-        self.valor_unit_var.set(f"R$ {brl_format(preco)}")
 
     def adicionar_ao_carrinho(self):
         """Adiciona item ao carrinho"""
@@ -459,10 +430,7 @@ class VendasUI(ttk.Window):
         for key, produto_info in self.produtos_cache.items():
             if produto_info.get('tipo') == tipo_atual:
                 sabor = produto_info.get('sabor', '').strip()
-                if sabor == sabor_selecionado:
-                    info = produto_info
-                    break
-                elif not sabor and produto_info.get('nome') == sabor_selecionado:
+                if sabor == sabor_selecionado or produto_info.get('nome') == sabor_selecionado:
                     info = produto_info
                     break
         
@@ -516,7 +484,6 @@ class VendasUI(ttk.Window):
             self.tree_cart.delete(r)
         
         for idx, it in enumerate(self.carrinho):
-            # Mostra o sabor ou nome
             display_sabor = it.get("sabor", "") or it.get("produto_nome", "")
             
             self.tree_cart.insert("", "end", iid=str(idx), values=(
@@ -574,64 +541,49 @@ class VendasUI(ttk.Window):
         except:
             self.troco_var.set("R$ 0,00")
 
-  
-  
     def _on_recebido_focus_in(self, event):
-        """Limpa campo ao clicar se estiver com valor padrão"""
+        """Limpa campo ao clicar"""
         valor = self.recebido_var.get()
         if valor in ["0,00", "R$ 0,00"]:
             self.recebido_var.set("")
 
-
     def _on_recebido_focus_out(self, event):
         """Formata valor ao sair do campo"""
         valor = self.recebido_var.get().strip()
-        if not valor or valor == "":
+        if not valor:
             self.recebido_var.set("0,00")
         else:
-        # Já formata com a máscara
             try:
                 valor_float = parse_brl_to_float(valor)
                 self.recebido_var.set(brl_format(valor_float))
             except:
                 self.recebido_var.set("0,00")
-    
         self._atualizar_troco()
 
     def _on_recebido_key(self, event):
-        """Formata valor enquanto digita (apenas números)"""
-        # Ignora teclas especiais
+        """Formata valor enquanto digita"""
         if event.keysym in ['BackSpace', 'Delete', 'Left', 'Right', 'Home', 'End', 'Tab']:
             self._atualizar_troco()
             return
-    
-     # Pega apenas números do que foi digitado
+        
         valor = self.recebido_var.get()
         apenas_numeros = ''.join(filter(str.isdigit, valor))
-    
+        
         if not apenas_numeros:
             self.recebido_var.set("")
             self._atualizar_troco()
             return
-    
-     # Converte para centavos e formata
+        
         try:
             centavos = int(apenas_numeros)
             valor_float = centavos / 100.0
-        
-            # Formata como moeda (sem R$)
             valor_formatado = f"{valor_float:.2f}".replace(".", ",")
-        
             self.recebido_var.set(valor_formatado)
-        
-            # Posiciona cursor no final
             self.recebido_entry.icursor(len(valor_formatado))
-        
         except:
             pass
-    
+        
         self._atualizar_troco()
-
 
     def _finalizar_venda(self):
         """Finaliza venda"""
@@ -659,13 +611,8 @@ class VendasUI(ttk.Window):
             
             cur.execute("""
                 INSERT INTO vendas (
-                    tipo_produto, 
-                    forma_pagamento, 
-                    total, 
-                    valor_recebido, 
-                    troco, 
-                    data_venda, 
-                    operador
+                    tipo_produto, forma_pagamento, total, 
+                    valor_recebido, troco, data_venda, operador
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
@@ -683,14 +630,8 @@ class VendasUI(ttk.Window):
             for item in self.carrinho:
                 cur.execute("""
                     INSERT INTO venda_items (
-                        venda_id, 
-                        produto_id, 
-                        produto_nome,
-                        tipo,
-                        quantidade, 
-                        peso_kg,
-                        preco_unitario, 
-                        subtotal
+                        venda_id, produto_id, produto_nome, tipo,
+                        quantidade, peso_kg, preco_unitario, subtotal
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
@@ -705,25 +646,101 @@ class VendasUI(ttk.Window):
                 ))
             
             conn.commit()
-            
-            self.sync.notify_change('produtos')
-            print("✅ Venda finalizada - estoque atualizado")
-            
             conn.close()
             
-            messagebox.showinfo(
-                "Sucesso",
-                f"Venda #{venda_id} finalizada!\n\n" +
-                f"Total: R$ {total:.2f}\n" +
-                f"Recebido: R$ {valor_recebido:.2f}\n" +
+            # Salva dados para impressão
+            if IMPRESSORA_DISPONIVEL:
+                self.ultima_venda_id = venda_id
+                self.ultima_venda_data = {
+                    'id': venda_id,
+                    'data_venda': timestamp,
+                    'operador': self.operador,
+                    'forma_pagamento': forma_pagamento,
+                    'total': total,
+                    'valor_recebido': valor_recebido,
+                    'troco': troco,
+                    'items': self.carrinho.copy(),
+                    'empresa': {
+                        'nome': 'SABOR DA FRUTA',
+                        'cnpj': '12.345.678/0001-90',
+                        'endereco': 'Rua Exemplo, 123 - Centro',
+                        'telefone': '(11) 98765-4321',
+                        'mensagem': 'Obrigado pela preferencia!',
+                        'site': 'www.sabordafruta.com.br'
+                    }
+                }
+                
+                if self.btn_imprimir:
+                    self.btn_imprimir.config(state="normal")
+            
+            self.sync.notify_change('produtos')
+            print("✅ Venda finalizada")
+            
+            msg_sucesso = (
+                f"Venda #{venda_id} finalizada!\n\n"
+                f"Total: R$ {total:.2f}\n"
+                f"Recebido: R$ {valor_recebido:.2f}\n"
                 f"Troco: R$ {troco:.2f}"
             )
             
+            if IMPRESSORA_DISPONIVEL:
+                msg_sucesso += "\n\nClique em 'IMPRIMIR CUPOM' para imprimir."
+            
+            messagebox.showinfo("Sucesso", msg_sucesso)
             self._limpar_venda()
             
         except Exception as e:
             logging.exception("Erro ao finalizar venda:")
             messagebox.showerror("Erro", f"Falha ao gravar venda: {e}")
+
+    def _imprimir_cupom(self):
+        """Imprime cupom da última venda"""
+        if not IMPRESSORA_DISPONIVEL:
+            messagebox.showwarning("Aviso", "Módulo de impressão não disponível.")
+            return
+            
+        if not self.ultima_venda_id or not self.ultima_venda_data:
+            messagebox.showwarning("Atenção", "Nenhuma venda para imprimir.")
+            return
+        
+        try:
+            resposta = messagebox.askyesno(
+                "Imprimir Cupom",
+                f"Deseja imprimir o cupom da venda #{self.ultima_venda_id}?"
+            )
+            
+            if not resposta:
+                return
+            
+            printer = ThermalPrinter()
+            cupom_bytes = printer.gerar_cupom(self.ultima_venda_data)
+            
+            preview_path = os.path.join(ROOT, f"cupom_venda_{self.ultima_venda_id}.txt")
+            with open(preview_path, 'wb') as f:
+                f.write(cupom_bytes)
+            print(f"💾 Preview salvo em: {preview_path}")
+            
+            if printer.imprimir(cupom_bytes):
+                messagebox.showinfo(
+                    "Sucesso",
+                    f"Cupom da venda #{self.ultima_venda_id} enviado para impressora!"
+                )
+                
+                if self.btn_imprimir:
+                    self.btn_imprimir.config(state="disabled")
+                self.ultima_venda_id = None
+                self.ultima_venda_data = None
+            else:
+                messagebox.showerror(
+                    "Erro de Impressão",
+                    f"Não foi possível imprimir o cupom.\n\n"
+                    f"Preview salvo em:\n{preview_path}\n\n"
+                    f"Verifique se a impressora está conectada."
+                )
+        
+        except Exception as e:
+            logging.exception("Erro ao imprimir cupom:")
+            messagebox.showerror("Erro", f"Falha ao imprimir: {e}")
 
     def _limpar_venda(self):
         """Limpa formulário após venda"""
@@ -749,9 +766,7 @@ class VendasUI(ttk.Window):
         try:
             subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
         except Exception:
-        # fallback simples caso Popen falhe
             os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"')
-    # fecha apenas esta janela; o novo processo continua rodando
         self.destroy()
 
 
