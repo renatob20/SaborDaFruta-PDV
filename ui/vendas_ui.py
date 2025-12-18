@@ -306,15 +306,15 @@ class VendasUI(ttk.Window):
             text="🖨️ IMPRIMIR CUPOM", 
             bootstyle="INFO",
             command=self._escolher_tipo_impressao, 
-            width=18,
+            width=23,
             state="disabled"
         )
         self.btn_imprimir.pack(side=RIGHT, padx=5)
         
         ttk.Button(botoes_finais, text="✅ FINALIZAR VENDA", bootstyle=SUCCESS, 
                   command=self._finalizar_venda, width=20).pack(side=RIGHT, padx=5)
-        ttk.Button(botoes_finais, text="🔙 Voltar ao Menu", bootstyle=INFO, 
-                  command=self.voltar_dashboard, width=15).pack(side=RIGHT, padx=5)
+        ttk.Button(botoes_finais, text="🔙 VOLTAR MENU", bootstyle=INFO, 
+                  command=self.voltar_dashboard, width=20).pack(side=RIGHT, padx=5)
 
     def _load_produtos(self):
         """Carrega produtos do banco"""
@@ -369,7 +369,7 @@ class VendasUI(ttk.Window):
         self.after(5000, self._iniciar_monitoramento)
 
     def _on_tipo_selected(self):
-        """Filtra produtos por tipo"""
+        """Filtra produtos por tipo e atualiza preço"""
         tipo = self.tipo_cb.get().strip()
         if not tipo:
             self.produto_cb.set("")
@@ -377,16 +377,28 @@ class VendasUI(ttk.Window):
             return
 
         values = []
+        preco_tipo = None
+        
         for key, info in self.produtos_cache.items():
             if (info.get('tipo') or "").strip() == tipo:
-                sabor = info.get('sabor', '').strip()
-                display_name = sabor if sabor else info.get('nome', key)
+                # Pega sabor (pode ser None)
+                sabor = info.get('sabor')
+                sabor = sabor.strip() if sabor else ""
+                
+                # Se não tem sabor, é um produto único do tipo (ex: Sorvete genérico)
+                if not sabor:
+                    display_name = info.get('nome', tipo)
+                    preco_tipo = info.get('preco', 0.0)  # Salva preço do tipo
+                else:
+                    display_name = sabor
+                
                 values.append(display_name)
 
         values = sorted(values, key=lambda x: x.lower())
         self.produto_cb['values'] = values
 
-        if tipo.lower() in ["sorvete", "açaí/sorvete"]:
+        # Ativa/desativa campos baseado no tipo
+        if tipo.lower() in ["sorvete", "açaí/sorvete", "açaí", "sorvete"]:
             self.peso_entry.config(state="normal")
             self.qtd_entry.config(state="disabled")
             self.qtd_var.set("")
@@ -395,17 +407,22 @@ class VendasUI(ttk.Window):
             self.peso_var.set("")
             self.qtd_entry.config(state="normal")
 
+        # Se tem produtos, seleciona o primeiro
         if values:
             self.produto_cb.current(0)
             self._on_produto_selected()
         else:
             self.produto_cb.set("")
-            self.valor_unit_var.set("R$ 0,00")
+            # Se não tem produtos mas tem preço do tipo, mostra
+            if preco_tipo:
+                self.valor_unit_var.set(f"R$ {brl_format(preco_tipo)}")
+            else:
+                self.valor_unit_var.set("R$ 0,00")
 
     def _on_produto_selected(self):
-        """Atualiza valor unitário"""
-        sabor_selecionado = self.produto_cb.get()
-        if not sabor_selecionado:
+        """Atualiza valor unitário ao selecionar produto"""
+        produto_selecionado = self.produto_cb.get()
+        if not produto_selecionado:
             self.valor_unit_var.set("R$ 0,00")
             return
 
@@ -414,8 +431,12 @@ class VendasUI(ttk.Window):
         
         for key, produto_info in self.produtos_cache.items():
             if produto_info.get('tipo') == tipo_atual:
-                sabor = produto_info.get('sabor', '').strip()
-                if sabor == sabor_selecionado or produto_info.get('nome') == sabor_selecionado:
+                sabor = produto_info.get('sabor')
+                sabor = sabor.strip() if sabor else ""
+                nome = produto_info.get('nome', '')
+                
+                # Tenta encontrar por sabor ou por nome
+                if (sabor and sabor == produto_selecionado) or (nome == produto_selecionado):
                     info = produto_info
                     break
         
@@ -427,18 +448,22 @@ class VendasUI(ttk.Window):
 
     def adicionar_ao_carrinho(self):
         """Adiciona item ao carrinho"""
-        sabor_selecionado = self.produto_cb.get()
-        if not sabor_selecionado:
+        produto_selecionado = self.produto_cb.get()
+        if not produto_selecionado:
             messagebox.showwarning("Atenção", "Selecione um produto.")
             return
         
         tipo_atual = self.tipo_cb.get().strip()
         info = None
         
+        # Busca info do produto
         for key, produto_info in self.produtos_cache.items():
             if produto_info.get('tipo') == tipo_atual:
-                sabor = produto_info.get('sabor', '').strip()
-                if sabor == sabor_selecionado or produto_info.get('nome') == sabor_selecionado:
+                sabor = produto_info.get('sabor')
+                sabor = sabor.strip() if sabor else ""
+                nome = produto_info.get('nome', '')
+                
+                if (sabor and sabor == produto_selecionado) or (nome == produto_selecionado):
                     info = produto_info
                     break
         
@@ -448,11 +473,13 @@ class VendasUI(ttk.Window):
         
         tipo = info.get("tipo", "")
         nome = info.get("nome")
-        sabor = info.get("sabor", "")
+        sabor = info.get("sabor")
+        sabor = sabor if sabor else ""  # Garante que não é None
         pid = info.get("id")
         preco = float(info.get("preco", 0.0))
 
-        if tipo.lower() in ["sorvete", "açaí/sorvete"]:
+        # Verifica se é produto vendido por peso
+        if tipo.lower() in ["sorvete", "açaí/sorvete", "açaí"]:
             peso = parse_peso_kg_input(self.peso_var.get())
             if peso <= 0:
                 messagebox.showwarning("Atenção", "Informe um peso válido.")
@@ -839,13 +866,24 @@ class VendasUI(ttk.Window):
             return
         
         try:
-            cupom = CupomDigital()
-            qr_page_path = cupom.gerar_pagina_qrcode(
+            # ✅ COM SERVIDOR HTTP (acesso via rede local)
+            cupom = CupomDigital(usar_servidor=True, porta=8080)
+            
+            qr_page_path, cupom_url = cupom.gerar_pagina_qrcode(
                 self.ultima_venda_id,
                 self.ultima_venda_data
             )
             
             print(f"📱 QR Code gerado: {qr_page_path}")
+            print(f"🌐 URL do cupom: {cupom_url}")
+            
+            # Verifica se servidor foi iniciado
+            if cupom.servidor and cupom.servidor.url_base:
+                servidor_url = cupom.servidor.url_base
+                mensagem_rede = f"\n🌐 Servidor: {servidor_url}\n⚠️ PDV e celular devem estar na mesma rede Wi-Fi"
+            else:
+                servidor_url = "Local"
+                mensagem_rede = "\n⚠️ Servidor não iniciado - QR Code só funciona neste computador"
             
             # Abre página do QR Code no navegador
             import webbrowser
@@ -854,8 +892,9 @@ class VendasUI(ttk.Window):
             messagebox.showinfo(
                 "Cupom Digital Gerado!",
                 f"✅ QR Code da venda #{self.ultima_venda_id} gerado!\n\n"
-                f"📱 O cliente pode escanear o QR Code para\n"
-                f"visualizar o cupom completo no celular.\n\n"
+                f"📱 Cliente pode escanear o QR Code para\n"
+                f"visualizar o cupom no celular."
+                f"{mensagem_rede}\n\n"
                 f"💚 Você economizou papel!"
             )
             

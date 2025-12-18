@@ -1,7 +1,7 @@
 # utils/cupom_digital.py
 """
-Sistema de Cupom Digital com QR Code
-Gera HTML do cupom e QR Code para visualização sem papel
+Sistema de Cupom Digital com QR Code e Servidor Web
+Gera HTML do cupom e serve via HTTP para acesso móvel
 """
 
 import os
@@ -11,21 +11,141 @@ from decimal import Decimal
 import webbrowser
 import base64
 from io import BytesIO
+import socket
+import threading
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import json
+
+
+class CupomHTTPHandler(SimpleHTTPRequestHandler):
+    """Handler personalizado para servir cupons"""
+    
+    def __init__(self, *args, directory=None, **kwargs):
+        self.directory = directory
+        super().__init__(*args, directory=directory, **kwargs)
+    
+    def log_message(self, format, *args):
+        """Suprime logs do servidor"""
+        pass
+
+
+class ServidorCupons:
+    """Servidor HTTP para disponibilizar cupons na rede local"""
+    
+    def __init__(self, porta=8080, cupons_dir="cupons_digitais"):
+        self.porta = porta
+        self.cupons_dir = cupons_dir
+        self.servidor = None
+        self.thread = None
+        self.url_base = None
+        
+        # Garante que a pasta existe
+        if not os.path.exists(cupons_dir):
+            os.makedirs(cupons_dir)
+    
+    def obter_ip_local(self):
+        """Obtém IP local da máquina na rede"""
+        try:
+            # Cria socket temporário para descobrir IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "127.0.0.1"
+    
+    def iniciar(self):
+        """Inicia servidor HTTP em background"""
+        if self.servidor:
+            print("⚠️ Servidor já está rodando")
+            return self.url_base
+        
+        try:
+            # Salva diretório atual
+            original_dir = os.getcwd()
+            
+            # Garante que diretório existe
+            cupons_path = os.path.abspath(self.cupons_dir)
+            if not os.path.exists(cupons_path):
+                os.makedirs(cupons_path)
+            
+            # Cria handler com diretório absoluto
+            handler = lambda *args, **kwargs: CupomHTTPHandler(
+                *args, 
+                directory=cupons_path,
+                **kwargs
+            )
+            
+            # Cria servidor
+            self.servidor = HTTPServer(('0.0.0.0', self.porta), handler)
+            
+            # Obtém IP local
+            ip_local = self.obter_ip_local()
+            self.url_base = f"http://{ip_local}:{self.porta}"
+            
+            # Inicia servidor em thread separada
+            self.thread = threading.Thread(target=self.servidor.serve_forever, daemon=True)
+            self.thread.start()
+            
+            # Volta para diretório original
+            os.chdir(original_dir)
+            
+            print(f"✅ Servidor iniciado em: {self.url_base}")
+            print(f"📁 Servindo arquivos de: {cupons_path}")
+            print(f"📱 Cupons acessíveis na rede local!")
+            
+            return self.url_base
+            
+        except Exception as e:
+            print(f"❌ Erro ao iniciar servidor: {e}")
+            return None
+    
+    def parar(self):
+        """Para o servidor"""
+        if self.servidor:
+            self.servidor.shutdown()
+            self.servidor = None
+            print("⏹️ Servidor parado")
+
+
+# Instância global do servidor
+_servidor_global = None
+
+
+def obter_servidor(porta=8080):
+    """Obtém ou cria instância única do servidor"""
+    global _servidor_global
+    
+    if _servidor_global is None:
+        _servidor_global = ServidorCupons(porta=porta)
+        _servidor_global.iniciar()
+    
+    return _servidor_global
 
 
 class CupomDigital:
-    """Gerador de cupom digital com QR Code"""
+    """Gerador de cupom digital com QR Code e servidor web"""
     
-    def __init__(self, output_dir="cupons_digitais"):
+    def __init__(self, output_dir="cupons_digitais", usar_servidor=True, porta=8080):
         """
         Args:
             output_dir: Pasta onde os cupons HTML serão salvos
+            usar_servidor: Se True, inicia servidor HTTP local
+            porta: Porta do servidor HTTP
         """
         self.output_dir = output_dir
+        self.usar_servidor = usar_servidor
+        self.porta = porta
         
         # Cria pasta se não existir
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+        
+        # Inicia servidor se solicitado
+        self.servidor = None
+        if usar_servidor:
+            self.servidor = obter_servidor(porta)
     
     def _format_brl(self, value):
         """Formata valor para BRL"""
@@ -42,7 +162,7 @@ class CupomDigital:
         Gera HTML do cupom estilo térmico
         
         Args:
-            venda_data: dict com dados da venda (mesmo formato da impressora)
+            venda_data: dict com dados da venda
         
         Returns:
             str: HTML do cupom
@@ -418,27 +538,36 @@ class CupomDigital:
     
     def gerar_qrcode(self, venda_id, venda_data):
         """
-        Gera QR Code que aponta para o cupom HTML
+        Gera QR Code que aponta para o cupom HTML via rede local
         
         Args:
             venda_id: ID da venda
             venda_data: dados da venda
         
         Returns:
-            tuple: (caminho_html, caminho_qrcode)
+            tuple: (caminho_html, caminho_qrcode, url_cupom)
         """
         # Gera HTML do cupom
         html_content = self.gerar_html_cupom(venda_data)
         
-        # Salva HTML
+        # Garante que o diretório existe
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+        
+        # Salva HTML com caminho absoluto
         html_filename = f"cupom_{venda_id:06d}.html"
-        html_path = os.path.join(self.output_dir, html_filename)
+        html_path = os.path.join(os.path.abspath(self.output_dir), html_filename)
         
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
         
-        # Converte caminho absoluto para URL
-        html_url = f"file:///{os.path.abspath(html_path).replace(os.sep, '/')}"
+        # Define URL do cupom
+        if self.usar_servidor and self.servidor:
+            # URL na rede local (acessível por celular)
+            cupom_url = f"{self.servidor.url_base}/{html_filename}"
+        else:
+            # URL local (só funciona no computador)
+            cupom_url = f"file:///{html_path.replace(os.sep, '/')}"
         
         # Gera QR Code
         qr = qrcode.QRCode(
@@ -448,49 +577,44 @@ class CupomDigital:
             border=4,
         )
         
-        qr.add_data(html_url)
+        qr.add_data(cupom_url)
         qr.make(fit=True)
         
         # Cria imagem do QR Code
         qr_img = qr.make_image(fill_color="#667eea", back_color="white")
         
-        # Salva QR Code
+        # Salva QR Code com caminho absoluto
         qr_filename = f"qrcode_{venda_id:06d}.png"
-        qr_path = os.path.join(self.output_dir, qr_filename)
+        qr_path = os.path.join(os.path.abspath(self.output_dir), qr_filename)
         qr_img.save(qr_path)
         
-        return html_path, qr_path
-    
-    def abrir_cupom_digital(self, venda_id, venda_data):
-        """
-        Gera cupom e abre no navegador
-        
-        Args:
-            venda_id: ID da venda
-            venda_data: dados da venda
-        
-        Returns:
-            tuple: (caminho_html, caminho_qrcode)
-        """
-        html_path, qr_path = self.gerar_qrcode(venda_id, venda_data)
-        
-        # Abre HTML no navegador padrão
-        webbrowser.open(f"file:///{os.path.abspath(html_path)}")
-        
-        return html_path, qr_path
+        return html_path, qr_path, cupom_url
     
     def gerar_pagina_qrcode(self, venda_id, venda_data):
         """
         Gera página HTML com QR Code para o cliente escanear
         
         Returns:
-            str: caminho do arquivo HTML com QR Code
+            tuple: (caminho_pagina_qr, url_cupom)
         """
-        html_path, qr_path = self.gerar_qrcode(venda_id, venda_data)
+        html_path, qr_path, cupom_url = self.gerar_qrcode(venda_id, venda_data)
         
         # Converte QR Code para base64
         with open(qr_path, 'rb') as f:
             qr_base64 = base64.b64encode(f.read()).decode()
+        
+        # IP e porta do servidor
+        if self.servidor:
+            ip_info = f"""
+            <div class="network-info">
+                <p><strong>📶 Rede:</strong> {self.servidor.url_base}</p>
+                <p style="font-size: 11px; color: #999;">
+                    Cliente e PDV devem estar na mesma rede Wi-Fi
+                </p>
+            </div>
+"""
+        else:
+            ip_info = ""
         
         # Gera página com QR Code
         qr_page = f"""
@@ -566,6 +690,35 @@ class CupomDigital:
             display: block;
         }}
         
+        .venda-info {{
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }}
+        
+        .venda-info p {{
+            margin: 5px 0;
+            color: #333;
+            font-size: 14px;
+        }}
+        
+        .network-info {{
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: left;
+        }}
+        
+        .network-info p {{
+            margin: 5px 0;
+            color: #856404;
+            font-size: 13px;
+        }}
+        
         .instrucoes {{
             background: #f8f9fa;
             padding: 25px;
@@ -584,20 +737,6 @@ class CupomDigital:
             color: #666;
             line-height: 2;
             padding-left: 20px;
-        }}
-        
-        .venda-info {{
-            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border-left: 4px solid #667eea;
-        }}
-        
-        .venda-info p {{
-            margin: 5px 0;
-            color: #333;
-            font-size: 14px;
         }}
         
         .botoes {{
@@ -658,6 +797,8 @@ class CupomDigital:
             <p><strong>Total:</strong> R$ {self._format_brl(venda_data.get('total', 0))}</p>
         </div>
         
+        {ip_info}
+        
         <div class="qrcode">
             <img src="data:image/png;base64,{qr_base64}" alt="QR Code do Cupom">
         </div>
@@ -665,6 +806,7 @@ class CupomDigital:
         <div class="instrucoes">
             <h3>📲 Como usar:</h3>
             <ol>
+                <li>Conecte seu celular na mesma rede Wi-Fi</li>
                 <li>Abra a câmera do seu celular</li>
                 <li>Aponte para o QR Code acima</li>
                 <li>Toque na notificação que aparecer</li>
@@ -673,7 +815,7 @@ class CupomDigital:
         </div>
         
         <div class="botoes">
-            <a href="{html_path}" target="_blank" class="btn btn-primary">
+            <a href="{cupom_url}" target="_blank" class="btn btn-primary">
                 👁️ VER CUPOM
             </a>
             <button onclick="window.print()" class="btn btn-secondary">
@@ -685,14 +827,14 @@ class CupomDigital:
 </html>
 """
         
-        # Salva página do QR Code
+        # Salva página do QR Code com caminho absoluto
         qr_page_filename = f"qrcode_page_{venda_id:06d}.html"
-        qr_page_path = os.path.join(self.output_dir, qr_page_filename)
+        qr_page_path = os.path.join(os.path.abspath(self.output_dir), qr_page_filename)
         
         with open(qr_page_path, 'w', encoding='utf-8') as f:
             f.write(qr_page)
         
-        return qr_page_path
+        return qr_page_path, cupom_url
 
 
 # ========== FUNÇÃO DE TESTE ==========
@@ -730,29 +872,26 @@ def testar_cupom_digital():
                 'quantidade': 1,
                 'valor_unit': 3.00,
                 'subtotal': 3.00
-            },
-            {
-                'tipo': 'Sorvete',
-                'sabor': 'Chocolate',
-                'peso_kg': 0.400,
-                'valor_unit': 50.00,
-                'subtotal': 20.00
             }
         ]
     }
     
-    print("📱 Gerando cupom digital...")
+    print("📱 Gerando cupom digital COM SERVIDOR...")
     
-    cupom = CupomDigital()
-    qr_page_path = cupom.gerar_pagina_qrcode(123, dados_teste)
+    cupom = CupomDigital(usar_servidor=True, porta=8080)
+    qr_page_path, cupom_url = cupom.gerar_pagina_qrcode(123, dados_teste)
     
     print(f"✅ QR Code gerado: {qr_page_path}")
-    print(f"🌐 Abrindo no navegador...")
+    print(f"🌐 URL do cupom: {cupom_url}")
+    print(f"📱 Escaneie o QR Code no celular!")
+    print(f"🔧 Servidor rodando em: {cupom.servidor.url_base}")
     
     import webbrowser
     webbrowser.open(f"file:///{os.path.abspath(qr_page_path)}")
     
-    print("✅ Teste concluído!")
+    print("\n✅ Teste concluído!")
+    print("⚠️ Mantenha este script rodando enquanto testa no celular")
+    input("Pressione ENTER para encerrar o servidor...")
 
 
 if __name__ == '__main__':
