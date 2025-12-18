@@ -1,10 +1,6 @@
 # Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
 .Python
-build/
+
 develop-eggs/
 dist/
 downloads/
@@ -21,17 +17,50 @@ wheels/
 *.egg
 .pytest_cache/
 .coverage
-.env
-venv/
-ECHO est  desativado.
+
+ECHO estï¿½ desativado.
 # VSCode
 .vscode/
 .vs/
-ECHO est  desativado.
-# Database
+ECHO estï¿½ desativado.
+
+# Banco de dados (NUNCA subir para o GitHub!)
 *.db
+*.sqlite
 *.sqlite3
-ECHO est  desativado.
-# Sistema
+database/*.db
+database/*.sqlite
+
+# Arquivos Python compilados
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Ambientes virtuais
+venv/
+env/
+ENV/
+.venv/
+
+# Arquivos temporÃ¡rios
+temp_flags/
+*.log
+*.tmp
+cupons_digitais/
+
+# Arquivos do PyInstaller
+build/
+dist/
+*.spec
+
+# Arquivos do sistema
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

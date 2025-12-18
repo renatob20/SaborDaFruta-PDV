@@ -1,0 +1,6 @@
+bcrypt
+ttkbootstrap==1.10.1
+bcrypt==4.1.2
+qrcode==7.4.2
+pillow==10.2.0
+pywin32==306
