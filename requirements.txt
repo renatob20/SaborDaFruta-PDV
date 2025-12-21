@@ -1,6 +1,94 @@
-bcrypt
-ttkbootstrap==1.10.1
-bcrypt==4.1.2
-qrcode==7.4.2
-pillow==10.2.0
-pywin32==306
+# Requirements.txt - Sabor da Fruta PDV
+# Versões testadas e compatíveis com PyInstaller
+
+# Interface Gráfica
+ttkbootstrap>=1.10.1
+
+# Segurança e Hash de Senhas
+# IMPORTANTE: bcrypt 4.0+ inclui dependências Rust necessárias
+bcrypt>=4.0.0
+
+# Geração de QR Code
+qrcode>=7.4.2
+
+# Processamento de Imagens (necessário para qrcode)
+Pillow>=10.0.0
+
+# Integração com Windows (impressão, etc)
+pywin32>=305
+
+# Build e Distribuição
+PyInstaller>=6.0.0
+
+# ========================================
+# NOTAS IMPORTANTES PARA PYINSTALLER
+# ========================================
+
+# 1. BCRYPT:
+#    - Versão 4.0+ usa Rust e requer coleta especial no PyInstaller
+#    - Sempre use: --collect-all=bcrypt --hidden-import=bcrypt._bcrypt
+#
+# 2. PYWIN32:
+#    - Necessário para funcionalidades Windows (impressão, etc)
+#    - PyInstaller detecta automaticamente na maioria dos casos
+#
+# 3. PILLOW:
+#    - Usado pelo qrcode para gerar imagens
+#    - PyInstaller inclui automaticamente
+#
+# 4. TTKBOOTSTRAP:
+#    - Temas modernos para Tkinter
+#    - Inclui recursos de tema que precisam ser empacotados
+
+# ========================================
+# INSTALAÇÃO RECOMENDADA
+# ========================================
+#
+# Ambiente virtual limpo:
+# python -m venv venv
+# venv\Scripts\activate
+# pip install --upgrade pip
+# pip install -r requirements.txt
+#
+# ========================================
+
+# ========================================
+# VERIFICAÇÃO DE INSTALAÇÃO
+# ========================================
+#
+# Execute este código para verificar:
+#
+# import sys
+# print(f"Python: {sys.version}")
+# 
+# try:
+#     import ttkbootstrap
+#     print(f"✓ ttkbootstrap {ttkbootstrap.__version__}")
+# except: print("✗ ttkbootstrap")
+# 
+# try:
+#     import bcrypt
+#     print(f"✓ bcrypt {bcrypt.__version__}")
+# except: print("✗ bcrypt")
+# 
+# try:
+#     import qrcode
+#     print(f"✓ qrcode {qrcode.__version__}")
+# except: print("✗ qrcode")
+# 
+# try:
+#     import PIL
+#     print(f"✓ Pillow {PIL.__version__}")
+# except: print("✗ Pillow")
+# 
+# try:
+#     import win32api
+#     print("✓ pywin32")
+# except: print("✗ pywin32")
+#
+# try:
+#     import PyInstaller
+#     print(f"✓ PyInstaller {PyInstaller.__version__}")
+# except: print("✗ PyInstaller")
+#
+# ========================================
