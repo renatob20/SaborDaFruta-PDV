@@ -51,8 +51,8 @@ class LoginUI(ttk.Frame):
                   command=self.master.quit).pack(side="right", padx=6)
 
         # Dica
-        ttk.Label(self, text="(Use admin / 1234 se for a primeira execução)", 
-                 font=("Segoe UI", 8)).pack(pady=6)
+        # ttk.Label(self, text="(Use admin / 1234 se for a primeira execução)", 
+        #          font=("Segoe UI", 8)).pack(pady=6)
 
         # Foco no usuário
         self.username_entry.focus_set()

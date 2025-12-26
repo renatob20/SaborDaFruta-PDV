@@ -1,8 +1,14 @@
 """
 db.py – Gerenciador único de banco de dados do sistema
 ------------------------------------------------------
-VERSÃO ATUALIZADA: Usa 'password' em vez de 'senha'
-Compatível com user_model.py existente
+VERSÃO CORRIGIDA PARA FUNCIONAR EM EXECUTÁVEL PYINSTALLER
+INCLUI TRATAMENTO DE ERROS MELHORADO
+
+🔌 Responsável por:
+ - Criar conexão única com o SQLite
+ - Garantir tabelas necessárias
+ - Executar migrations automáticas (sem perder dados)
+ - Funcionar tanto em desenvolvimento quanto em executável
 """
 
 import os
@@ -13,24 +19,32 @@ import traceback
 def get_db_path():
     """
     Retorna caminho correto do banco, funciona tanto em dev quanto em executável.
+    
+    IMPORTANTE: Esta função resolve o problema de "unable to open database file"
+    quando o sistema roda como executável PyInstaller.
     """
     try:
         if getattr(sys, 'frozen', False):
+            # Executando como executável PyInstaller
+            # sys.executable aponta para o .exe
             application_path = os.path.dirname(sys.executable)
             print(f"🔧 Modo: Executável")
         else:
-            #application_path = os.path.dirname(os.path.abspath(__file__))
-            application_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            # Executando em modo desenvolvimento
+            application_path = os.path.dirname(os.path.abspath(__file__))
             print(f"🔧 Modo: Desenvolvimento")
         
         print(f"📂 Caminho da aplicação: {application_path}")
         
+        # Garante que a pasta database existe
         db_dir = os.path.join(application_path, 'database')
         
+        # Tenta criar a pasta, se falhar tenta no diretório do usuário
         try:
             os.makedirs(db_dir, exist_ok=True)
         except (PermissionError, OSError) as e:
             print(f"⚠️ Não foi possível criar em {db_dir}")
+            # Fallback: usar pasta do usuário
             user_dir = os.path.expanduser("~")
             db_dir = os.path.join(user_dir, "SaborDaFruta-PDV", "database")
             os.makedirs(db_dir, exist_ok=True)
@@ -44,16 +58,21 @@ def get_db_path():
     except Exception as e:
         print(f"❌ Erro ao determinar caminho do banco: {e}")
         traceback.print_exc()
+        # Fallback final: pasta do usuário
         user_dir = os.path.expanduser("~")
         db_dir = os.path.join(user_dir, "SaborDaFruta-PDV", "database")
         os.makedirs(db_dir, exist_ok=True)
         return os.path.join(db_dir, "acaiteria.db")
 
+# 🔹 Caminho do arquivo SQLite
 DB_PATH = get_db_path()
 
 
 def get_connection():
-    """Retorna uma conexão com o banco."""
+    """
+    Retorna uma conexão com o banco.
+    Sempre use esta função em vez de sqlite3.connect diretamente.
+    """
     try:
         conn = sqlite3.connect(DB_PATH, timeout=10.0)
         return conn
@@ -71,7 +90,7 @@ def get_connection():
 def ensure_schema():
     """
     Garante que TODAS as tabelas existam.
-    ATUALIZADO: Usa 'password' em vez de 'senha' para compatibilidade
+    Também corrige colunas faltantes automaticamente.
     """
     
     try:
@@ -81,7 +100,6 @@ def ensure_schema():
         cur = conn.cursor()
 
         # ---------------------- TABELA USUÁRIOS ----------------------
-        # ✅ IMPORTANTE: Usa 'password' (não 'senha')
         cur.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,13 +108,11 @@ def ensure_schema():
                 celular TEXT,
                 display_name TEXT NOT NULL,
                 username TEXT UNIQUE NOT NULL,
-                password BLOB NOT NULL,
+                senha BLOB NOT NULL,
                 role TEXT DEFAULT 'operador',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP    
             );
         """)
-        
-        print("✅ Tabela usuarios verificada (coluna: password)")
         
         # 🔧 MIGRATIONS AUTOMÁTICAS
         cur.execute("PRAGMA table_info(usuarios)")
@@ -116,41 +132,6 @@ def ensure_schema():
         add_col("celular", "ALTER TABLE usuarios ADD COLUMN celular TEXT")
         add_col("created_at", "ALTER TABLE usuarios ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
-        # ✅ Migration especial: Se existe 'senha', renomeia para 'password'
-        if 'senha' in cols and 'password' not in cols:
-            print("🔄 Detectada coluna 'senha'. Migrando para 'password'...")
-            try:
-                # Criar tabela temporária
-                cur.execute("""
-                    CREATE TABLE usuarios_temp (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        nome_completo TEXT NOT NULL,
-                        cpf TEXT NOT NULL UNIQUE,
-                        celular TEXT,
-                        display_name TEXT NOT NULL,
-                        username TEXT UNIQUE NOT NULL,
-                        password BLOB NOT NULL,
-                        role TEXT DEFAULT 'operador',
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                
-                # Copiar dados
-                cur.execute("""
-                    INSERT INTO usuarios_temp 
-                    SELECT id, nome_completo, cpf, celular, display_name, 
-                           username, senha, role, created_at
-                    FROM usuarios
-                """)
-                
-                # Substituir tabela
-                cur.execute("DROP TABLE usuarios")
-                cur.execute("ALTER TABLE usuarios_temp RENAME TO usuarios")
-                
-                print("✅ Coluna 'senha' migrada para 'password'!")
-            except Exception as e:
-                print(f"⚠️ Erro na migration senha→password: {e}")
-
         # ---------------------- TABELA PRODUTOS ----------------------
         cur.execute("""
             CREATE TABLE IF NOT EXISTS produtos (
@@ -165,6 +146,7 @@ def ensure_schema():
             );
         """)
         
+        # 🔧 Migration: Adiciona coluna 'nome' se não existir
         cur.execute("PRAGMA table_info(produtos)")
         cols = [c[1] for c in cur.fetchall()]
         
@@ -199,6 +181,7 @@ def ensure_schema():
             );
         """)
         
+        # Adicionar colunas faltantes
         cur.execute("PRAGMA table_info(vendas)")
         cols = [c[1] for c in cur.fetchall()]
         
@@ -275,7 +258,9 @@ def ensure_schema():
 def criar_usuario_admin_padrao():
     """
     Cria um usuário admin padrão se não existir nenhum usuário.
-    ✅ ATUALIZADO: Usa 'password' em vez de 'senha'
+    
+    IMPORTANTE: Esta função só deve ser chamada explicitamente,
+    não automaticamente ao importar o módulo.
     """
     try:
         import bcrypt
@@ -283,18 +268,19 @@ def criar_usuario_admin_padrao():
         conn = get_connection()
         cur = conn.cursor()
         
+        # Verifica se já existe algum usuário
         cur.execute("SELECT COUNT(*) FROM usuarios")
         count = cur.fetchone()[0]
         
         if count == 0:
             print("👤 Criando usuário admin padrão...")
             
+            # Hash da senha "1234"
             senha_hash = bcrypt.hashpw("1234".encode('utf-8'), bcrypt.gensalt())
             
-            # ✅ MUDANÇA: 'senha' → 'password'
             cur.execute("""
                 INSERT INTO usuarios (nome_completo, cpf, celular,
-                    display_name, username, password, role)
+                    display_name, username, senha, role)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, ("Administrador do Sistema",
                 "00000000000",
@@ -316,6 +302,7 @@ def criar_usuario_admin_padrao():
     
     except ImportError as e:
         print(f"❌ Erro ao importar bcrypt: {e}")
+        print("   Certifique-se de que bcrypt está instalado")
         traceback.print_exc()
         return False
     
@@ -325,7 +312,10 @@ def criar_usuario_admin_padrao():
         return False
 
 
+# IMPORTANTE: NÃO executar automaticamente ao importar
+# As funções devem ser chamadas explicitamente pelo main.py
 if __name__ == "__main__":
+    # Permite testar o módulo diretamente
     print("🧪 Testando módulo db.py...")
     if ensure_schema():
         criar_usuario_admin_padrao()

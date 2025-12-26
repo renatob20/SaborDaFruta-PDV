@@ -1,9 +1,9 @@
 # controllers/usuario_controller.py
 from models.user_model import create_user, listar_usuarios, get_user_by_id, update_user, delete_user
 
-def cadastrar_usuario(nome, cpf, celular, username, senha, role="operador"):
+def cadastrar_usuario(nome, cpf, celular, username, password, role="operador"):
     # validações simples
-    if not nome or not cpf or not username or not senha:
+    if not nome or not cpf or not username or not password:
         raise ValueError("Preencha todos os campos obrigatórios: Nome, CPF, Usuário e Senha.")
     # CPF simples: remove pontos/traços, mínimo 11 chars
     cpf_clean = ''.join(ch for ch in cpf if ch.isdigit())
@@ -11,7 +11,7 @@ def cadastrar_usuario(nome, cpf, celular, username, senha, role="operador"):
         raise ValueError("CPF inválido (mínimo 11 dígitos).")
 
     # tenta criar e repassa exceções de integridade
-    return create_user(nome, cpf_clean, celular, username, senha, role, display_name=nome)
+    return create_user(nome, cpf_clean, celular, username, password, role, display_name=nome)
 
 
 def listar_todos_usuarios():

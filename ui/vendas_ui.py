@@ -115,9 +115,11 @@ def ensure_tables():
     conn.close()
 
 # ---------- CLASSE PRINCIPAL ----------
-class VendasUI(ttk.Window):
-    def __init__(self, display_name="Admin", role="admin"):
-        super().__init__(themename="superhero")
+class VendasUI(ttk.Frame):
+    def __init__(self,master, display_name="Admin", role="admin"):
+        super().__init__(master)
+        self.master = master
+        self.pack(fill=BOTH, expand=True)
         
         # Atributos
         self.display_name = display_name
@@ -134,15 +136,12 @@ class VendasUI(ttk.Window):
         self.ultima_venda_data = None
         self.btn_imprimir = None
         
-        # Janela
-        self.title(f"📋 PDV - Vendas - {self.operador}")
-        self.minsize(900, 650)
-        
+               
         try:
-            self.state("zoomed")
+            self.master.state("zoomed")
         except:
             try:
-                self.attributes("-zoomed", True)
+                self.master.attributes("-zoomed", True)
             except:
                 pass
         
@@ -156,10 +155,26 @@ class VendasUI(ttk.Window):
 
     def _build_ui(self):
         """Layout estilo cupom fiscal"""
-        
+                        
         # Container principal
-        main_container = ttk.Frame(self, padding=15)
+        main_container = ttk.Frame(self)
         main_container.pack(fill=BOTH, expand=True)
+        
+        # Header
+        header_frame = ttk.Frame(main_container, style="Dark.TFrame")
+        header_frame.pack(fill=X, padx=0, pady=0)
+        
+        ttk.Label(header_frame, text="📋 Vendas de produtos",
+        font=("Segoe UI", 18, "bold"), 
+        foreground="#FFFFFF").pack(pady=10)
+        
+        # Separador
+        separator = ttk.Frame(header_frame, height=2, style="success.TFrame")
+        separator.pack(fill=X, padx=50, pady=(0, 10))
+
+        
+
+
         
         # ========== SEÇÃO SUPERIOR: SELEÇÃO DE PRODUTOS ==========
         selecao_frame = ttk.Labelframe(main_container, text="ADICIONAR PRODUTO", padding=12)
@@ -931,14 +946,8 @@ class VendasUI(ttk.Window):
 
     def voltar_dashboard(self):
         """Volta para dashboard"""
-        dashboard_script = os.path.join(ROOT, "ui", "dashboard_ui.py")
-        try:
-            subprocess.Popen([sys.executable, dashboard_script, self.display_name, self.role], close_fds=True)
-        except Exception:
-            os.system(f'"{sys.executable}" "{dashboard_script}" "{self.display_name}" "{self.role}"')
         self.destroy()
-
-
-if __name__ == "__main__":
-    app = VendasUI("Admin", "admin")
-    app.mainloop()
+        from ui.dashboard_ui import DashboardUI
+        DashboardUI(master=self.master,
+                    display_name=self.display_name,
+                    role=self.role)

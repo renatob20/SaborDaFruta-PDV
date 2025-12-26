@@ -30,28 +30,27 @@ from database.bater_ponto_db import (
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
-# ========== AJUSTE: Classe modificada para Window em vez de Toplevel ==========
-class BaterPontoUI(ttk.Window):
-    """Janela independente para registro de ponto."""
+class BaterPontoUI(ttk.Frame):
+    """Tela de Registro de Ponto - Padrão Frame"""
 
-    def __init__(self, operador_display=None, role="operador"):
-        super().__init__(themename="superhero")
+    def __init__(self, master, operador_display=None, role="operador"):
+        super().__init__(master)  # ✅ PRIMEIRO
+        self.master = master
+        self.pack(fill=BOTH, expand=True)  # ✅ DEPOIS
         
-        # ---- Maximiza a Janela (Comportamento padrão para Windows) ----
-        try:
-            self.state("zoomed")
-        except Exception:
-            # Fallback para sistemas Windows onde 'zoomed' não está disponível
-            # ou em casos muito específicos.
-            self.attributes("-zoomed", True)
-        
-        
+        # Atributos
         self.operador_display = operador_display
+        self.display_name = operador_display  # ← Alias para compatibilidade
         self.role = role
 
-        self.title("⏰ Registro de Ponto")
-        self.geometry("1100x700")
-        self.minsize(1000, 600)
+        # Maximiza janela
+        try:
+            self.master.state("zoomed")
+        except:
+            try:
+                self.master.attributes("-zoomed", True)
+            except:
+                pass
 
         # vars
         self.funcionario_var = StringVar()
@@ -73,19 +72,41 @@ class BaterPontoUI(ttk.Window):
         # carrega dados iniciais
         self._carregar_operadores()
 
+    def voltar_dashboard(self):
+        """Volta para dashboard - SEM subprocess"""
+        self.destroy()
+        from ui.dashboard_ui import DashboardUI
+        DashboardUI(master=self.master, 
+                    display_name=self.display_name, 
+                    role=self.role)
+
     def _build_ui(self):
         """Constrói o layout da janela."""
-        pad = 10
+        # Container principal
+        main_container = ttk.Frame(self)
+        main_container.pack(fill=BOTH, expand=True, padx=15, pady=15)
+        
+        # ========== HEADER ==========
+        header_frame = ttk.Frame(main_container, style="Dark.TFrame")
+        header_frame.pack(fill=X, padx=0, pady=0)
 
-        # ===== HEADER =====
-        header = ttk.Label(self, text="⏰ Registro de Ponto", font=("Segoe UI", 14, "bold"))
-        header.pack(pady=5)
+        ttk.Label(
+            header_frame, 
+            text="⏰ Registro de Ponto",
+            font=("Segoe UI", 18, "bold"), 
+            foreground="#FFFFFF"
+        ).pack(pady=10)
 
+        # Separador
+        separator = ttk.Frame(header_frame, height=2, style="success.TFrame")
+        separator.pack(fill=X, padx=50, pady=(0, 10))
+        
+      
         # ===== Frame Top (Registro de Ponto) =====
-        frm_registro = ttk.Labelframe(self, text="🕐 Registrar Ponto", padding=10)
-        frm_registro.pack(fill="x", padx=pad, pady=(5, 10))
+        frm_registro = ttk.Labelframe(main_container, text="🕐 Registrar Ponto", padding=10)
+        frm_registro.pack(fill="x", padx=0, pady=(5, 10))
 
-        ttk.Label(frm_registro, text="Operador:", font=("Arial", 10)).pack(side="left", padx=(0, 5))
+        ttk.Label(frm_registro, text="Operador:", font=("Segoe UI", 10)).pack(side="left", padx=(0, 5))
         self.func_cb = ttk.Combobox(
             frm_registro,
             textvariable=self.funcionario_var,
@@ -104,14 +125,24 @@ class BaterPontoUI(ttk.Window):
         ttk.Button(
             frm_registro,
             text="🔄 Atualizar",
-            bootstyle=INFO,
+            bootstyle=SECONDARY,
             command=self._carregar_operadores
         ).pack(side="left", padx=(0, 5))
 
-        # ===== FILTROS AVANÇADOS =====
-        filtros_frame = ttk.Labelframe(self, text="🔍 Filtros Avançados", padding=15)
-        filtros_frame.pack(fill=X, padx=pad, pady=(0, 10))
+          ##  BOTÃO VOLTAR
 
+        ttk.Button(
+            frm_registro, 
+            text="🔙 Voltar ao Menu", 
+            bootstyle="info", 
+            command=self.voltar_dashboard
+        ).pack(side="right", padx=(0, 5))
+
+        
+        # ===== FILTROS AVANÇADOS =====
+        filtros_frame = ttk.Labelframe(main_container, text="🔍 Filtros Avançados", padding=15)
+        filtros_frame.pack(fill=X, padx=0, pady=(0, 10))
+        
         # Linha 1: Botões rápidos
         btn_rapidos = ttk.Frame(filtros_frame)
         btn_rapidos.pack(fill=X, pady=(0, 10))
@@ -164,8 +195,8 @@ class BaterPontoUI(ttk.Window):
                    command=self.limpar_filtros).pack(side=LEFT, padx=3)
 
         # ===== Frame Botões de Exportação =====
-        frm_export = ttk.Frame(self)
-        frm_export.pack(fill=X, padx=pad, pady=(0, 5))
+        frm_export = ttk.Frame(main_container)
+        frm_export.pack(fill=X, padx=0, pady=(0, 5))
 
         ttk.Label(frm_export, text="📥 Exportar:", font=("Segoe UI", 10, "bold")).pack(side=LEFT, padx=(0, 10))
 
@@ -186,8 +217,8 @@ class BaterPontoUI(ttk.Window):
         ).pack(side=LEFT, padx=5)
 
         # ===== Frame Histórico (Treeview) =====
-        frm_hist = ttk.Labelframe(self, text="📋 Histórico de Batidas", padding=10)
-        frm_hist.pack(fill="both", expand=True, padx=pad, pady=(0, pad))
+        frm_hist = ttk.Labelframe(main_container, text="📋 Histórico de Batidas", padding=10)
+        frm_hist.pack(fill="both", expand=True, padx=0, pady=(0, 0))
 
         cols = ("id", "operador", "tipo", "timestamp")
         self.tree = ttk.Treeview(
@@ -587,15 +618,9 @@ class BaterPontoUI(ttk.Window):
             messagebox.showerror("Erro", f"Falha ao exportar PDF: {e}")
 
 
-# ========== EXECUÇÃO DIRETA (AJUSTADO - SEM JANELA EXTRA) ==========
-# Execução direta para teste
+# ========== EXECUÇÃO DIRETA PARA TESTE ==========
 if __name__ == "__main__":
-    import sys
-    
-    # obtém argumentos passados via linha de comando (do dashboard)
-    operador_display = sys.argv[1] if len(sys.argv) > 1 else "Operador"
-    role = sys.argv[2] if len(sys.argv) > 2 else "operador"
-    
-    # Cria janela principal diretamente (sem root invisível)
-    app = BaterPontoUI(operador_display=operador_display, role=role)
-    app.mainloop()
+    root = ttk.Window(themename="superhero")
+    root.title("Sistema de Ponto")
+    app = BaterPontoUI(root, operador_display="Teste Admin", role="admin")
+    root.mainloop()
