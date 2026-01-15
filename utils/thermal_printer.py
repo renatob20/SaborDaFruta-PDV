@@ -83,7 +83,7 @@ class ThermalPrinter:
     
     def gerar_cupom(self, venda_data):
         """
-        Gera cupom de venda
+        Gera cupom de venda com novo layout profissional
         
         Args:
             venda_data: dict com dados da venda
@@ -101,19 +101,27 @@ class ThermalPrinter:
         
         # Inicializa impressora
         self._add(self.INIT)
-        
-        # ========== CABEÇALHO ==========
         self._add(self.ALIGN_CENTER)
-        self._add(self.DOUBLE_SIZE)
-        self._add(self.BOLD_ON)
         
         empresa = venda_data.get('empresa', {})
-        nome_empresa = empresa.get('nome', 'SABOR DA FRUTA')
-        self._add(nome_empresa)
-        self._add(self.LINE_FEED)
         
+        # ========== CABEÇALHO DECORATIVO ==========
+        self._linha('=')
+        
+        # ========== NOME EMPRESA ==========
+        self._add(self.DOUBLE_SIZE)
+        self._add(self.BOLD_ON)
+        nome_empresa = empresa.get('nome', 'EMPRESA')
+        self._add(self._centralizar(nome_empresa))
+        self._add(self.LINE_FEED)
         self._add(self.NORMAL)
         self._add(self.BOLD_OFF)
+        
+        # ========== DECORATIVO ==========
+        self._linha('=')
+        
+        # ========== DADOS EMPRESA ==========
+        self._add(self.ALIGN_CENTER)
         
         if empresa.get('cnpj'):
             self._add(f"CNPJ: {empresa['cnpj']}")
@@ -127,19 +135,20 @@ class ThermalPrinter:
             self._add(f"Tel: {empresa['telefone']}")
             self._add(self.LINE_FEED)
         
-        self._add(self.LINE_FEED)
+        # ========== SEPARADOR ==========
+        self._linha('-')
         
-        # ========== INFORMAÇÕES DA VENDA ==========
-        self._add(self.ALIGN_LEFT)
-        self._linha('=')
-        
+        # ========== TIPO COMPROVANTE ==========
         self._add(self.BOLD_ON)
-        self._add(f"CUPOM NAO FISCAL")
+        self._add(self._centralizar("NAO E CUPOM FISCAL"))
         self._add(self.LINE_FEED)
         self._add(self.BOLD_OFF)
         
-        self._add(f"Venda: #{venda_data['id']:06d}")
-        self._add(self.LINE_FEED)
+        # ========== SEPARADOR ==========
+        self._linha('-')
+        
+        # ========== INFO DA VENDA ==========
+        self._add(self.ALIGN_LEFT)
         
         # Formata data/hora
         try:
@@ -148,72 +157,79 @@ class ThermalPrinter:
         except:
             data_str = venda_data['data_venda']
         
-        self._add(f"Data: {data_str}")
+        venda_id = venda_data['id']
+        # Data e número na mesma linha
+        linha_info = f"Data: {data_str}  Venda #{venda_id:06d}"
+        self._add(linha_info[:self.largura])
         self._add(self.LINE_FEED)
         
+        # Operador
         self._add(f"Operador: {venda_data.get('operador', 'Sistema')}")
         self._add(self.LINE_FEED)
         
-        self._linha('=')
-        
-        # ========== ITENS ==========
-        self._add(self.BOLD_ON)
-        self._add("ITEM  DESCRICAO          QTD    VALOR")
-        self._add(self.LINE_FEED)
-        self._add(self.BOLD_OFF)
+        # ========== SEPARADOR ITENS ==========
         self._linha('-')
         
+        # ========== CABEÇALHO ITENS ==========
+        self._add(self.BOLD_ON)
+        cabecalho = " ITEM  DESCRICAO       QTD         VALOR"
+        self._add(cabecalho[:self.largura])
+        self._add(self.LINE_FEED)
+        self._add(self.BOLD_OFF)
+        
+        # ========== SEPARADOR ITENS ==========
+        self._linha('-')
+        
+        # ========== ITENS ==========
         for idx, item in enumerate(venda_data['items'], 1):
-            # Linha 1: Número e descrição
+            # Número, descrição e valores em uma linha
             tipo = item.get('tipo', '')
             sabor = item.get('sabor', '')
             
             if sabor:
-                descricao = f"{tipo} - {sabor}"
+                descricao = f"{tipo} {sabor}"
             else:
                 descricao = item.get('produto_nome', tipo)
             
-            # Limita descrição a 20 chars
-            if len(descricao) > 20:
-                descricao = descricao[:17] + '...'
+            # Limita descrição a 16 caracteres
+            descricao = descricao[:16]
             
-            self._add(f"{idx:03d}  {descricao:<20}")
-            self._add(self.LINE_FEED)
-            
-            # Linha 2: Quantidade/Peso e Valor
+            # Quantidade ou peso
             if item.get('peso_kg') is not None:
                 qtd_str = f"{item['peso_kg']:.3f}kg"
             else:
-                qtd_str = f"{item['quantidade']}x"
+                qtd_str = f"{item['quantidade']}un"
             
-            valor_unit = item.get('valor_unit', 0)
             subtotal = item.get('subtotal', 0)
-            
-            # Formata valores
-            unit_str = f"R$ {self._format_brl(valor_unit)}"
             sub_str = f"R$ {self._format_brl(subtotal)}"
             
-            linha_valores = f"      {qtd_str} x {unit_str:<12} {sub_str:>10}"
-            self._add(linha_valores)
+            # Formato: " 01. Descrição       QTD          VALOR"
+            linha_item = f" {idx:02d}. {descricao:<16s} {qtd_str:>8s}  {sub_str:>9s}"
+            self._add(linha_item[:self.largura])
             self._add(self.LINE_FEED)
         
+        # ========== SEPARADOR FINAL ITENS ==========
         self._linha('=')
         
-        # ========== TOTAIS ==========
+        # ========== TOTAL ==========
         total = venda_data.get('total', 0)
         
+        self._add(self.ALIGN_CENTER)
         self._add(self.DOUBLE_HEIGHT)
         self._add(self.BOLD_ON)
-        self._add(self._duas_colunas("TOTAL:", f"R$ {self._format_brl(total)}"))
+        total_str = f"TOTAL: R$ {self._format_brl(total)}"
+        self._add(self._centralizar(total_str))
         self._add(self.LINE_FEED)
         self._add(self.NORMAL)
         self._add(self.BOLD_OFF)
         
-        self._linha('-')
+        # ========== DECORATIVO TOTAL ==========
+        self._linha('=')
         
-        # Forma de pagamento
-        forma = venda_data.get('forma_pagamento', '')
-        self._add(f"Pagamento: {forma}")
+        # ========== PAGAMENTO ==========
+        self._add(self.ALIGN_LEFT)
+        forma = venda_data.get('forma_pagamento', 'N/A')
+        self._add(f"Forma de Pagamento: {forma}")
         self._add(self.LINE_FEED)
         
         # Valor recebido e troco (apenas para dinheiro)
@@ -221,30 +237,40 @@ class ThermalPrinter:
             valor_recebido = venda_data.get('valor_recebido', 0)
             troco = venda_data.get('troco', 0)
             
-            self._add(self._duas_colunas("Valor Recebido:", f"R$ {self._format_brl(valor_recebido)}"))
+            recebido_str = self._format_brl(valor_recebido)
+            troco_str = self._format_brl(troco)
+            
+            # Com pontos de preenchimento
+            linha_recebido = f"Valor Recebido{('.' * 20)}R$ {recebido_str}"
+            self._add(linha_recebido[:self.largura])
             self._add(self.LINE_FEED)
             
-            self._add(self._duas_colunas("Troco:", f"R$ {self._format_brl(troco)}"))
+            linha_troco = f"Troco{('.' * 28)}R$ {troco_str}"
+            self._add(linha_troco[:self.largura])
             self._add(self.LINE_FEED)
         
-        self._linha('=')
+        # ========== SEPARADOR RODAPÉ ==========
+        self._linha('-')
         
         # ========== RODAPÉ ==========
-        self._add(self.LINE_FEED)
         self._add(self.ALIGN_CENTER)
         
         mensagem = empresa.get('mensagem', 'Obrigado pela preferencia!')
-        self._add(mensagem)
+        self._add(self._centralizar(mensagem))
         self._add(self.LINE_FEED)
         
         if empresa.get('site'):
-            self._add(empresa['site'])
+            self._add(self._centralizar(empresa['site']))
             self._add(self.LINE_FEED)
         
+        # Data e hora de geração
+        gerado_em = datetime.now().strftime('%d/%m %H:%M')
+        self._add(self._centralizar(f"Gerado em: {gerado_em}"))
         self._add(self.LINE_FEED)
-        self._add("** CUPOM NAO FISCAL **")
-        self._add(self.LINE_FEED)
-        self._add(self.LINE_FEED)
+        
+        # ========== DECORATIVO FINAL ==========
+        self._linha('=')
+        
         self._add(self.LINE_FEED)
         
         # Corta papel

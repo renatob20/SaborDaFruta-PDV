@@ -10,7 +10,7 @@ import subprocess
 # GUI
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from tkinter import messagebox, StringVar
+from tkinter import messagebox, StringVar, filedialog
 
 # garante que imports relativos funcionem
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -28,13 +28,14 @@ except ImportError:
     IMPRESSORA_DISPONIVEL = False
     print("⚠️ Módulo de impressão térmica não disponível")
 
-# Importação do cupom digital
+# Importação do gerador de PDF
 try:
-    from utils.cupom_digital import CupomDigital
-    CUPOM_DIGITAL_DISPONIVEL = True
+    from utils.cupom_pdf import CupomPDF
+    PDF_DISPONIVEL = True
 except ImportError:
-    CUPOM_DIGITAL_DISPONIVEL = False
-    print("⚠️ Módulo de cupom digital não disponível (instale: pip install qrcode)")
+    PDF_DISPONIVEL = False
+    print("⚠️ Módulo de PDF não disponível (instale: pip install reportlab)")
+
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -315,7 +316,7 @@ class VendasUI(ttk.Frame):
         botoes_finais = ttk.Frame(main_container)
         botoes_finais.pack(fill=X, pady=(10, 0))
         
-        # Botão IMPRIMIR sempre visível (oferece escolha entre térmico e digital)
+        # Botão IMPRIMIR sempre visível (oferece escolha entre térmico e PDF)
         self.btn_imprimir = ttk.Button(
             botoes_finais, 
             text="🖨️ IMPRIMIR CUPOM", 
@@ -396,14 +397,12 @@ class VendasUI(ttk.Frame):
         
         for key, info in self.produtos_cache.items():
             if (info.get('tipo') or "").strip() == tipo:
-                # Pega sabor (pode ser None)
                 sabor = info.get('sabor')
                 sabor = sabor.strip() if sabor else ""
                 
-                # Se não tem sabor, é um produto único do tipo (ex: Sorvete genérico)
                 if not sabor:
                     display_name = info.get('nome', tipo)
-                    preco_tipo = info.get('preco', 0.0)  # Salva preço do tipo
+                    preco_tipo = info.get('preco', 0.0)
                 else:
                     display_name = sabor
                 
@@ -412,7 +411,6 @@ class VendasUI(ttk.Frame):
         values = sorted(values, key=lambda x: x.lower())
         self.produto_cb['values'] = values
 
-        # Ativa/desativa campos baseado no tipo
         if tipo.lower() in ["sorvete", "açaí/sorvete", "açaí", "sorvete"]:
             self.peso_entry.config(state="normal")
             self.qtd_entry.config(state="disabled")
@@ -422,13 +420,11 @@ class VendasUI(ttk.Frame):
             self.peso_var.set("")
             self.qtd_entry.config(state="normal")
 
-        # Se tem produtos, seleciona o primeiro
         if values:
             self.produto_cb.current(0)
             self._on_produto_selected()
         else:
             self.produto_cb.set("")
-            # Se não tem produtos mas tem preço do tipo, mostra
             if preco_tipo:
                 self.valor_unit_var.set(f"R$ {brl_format(preco_tipo)}")
             else:
@@ -450,7 +446,6 @@ class VendasUI(ttk.Frame):
                 sabor = sabor.strip() if sabor else ""
                 nome = produto_info.get('nome', '')
                 
-                # Tenta encontrar por sabor ou por nome
                 if (sabor and sabor == produto_selecionado) or (nome == produto_selecionado):
                     info = produto_info
                     break
@@ -471,7 +466,6 @@ class VendasUI(ttk.Frame):
         tipo_atual = self.tipo_cb.get().strip()
         info = None
         
-        # Busca info do produto
         for key, produto_info in self.produtos_cache.items():
             if produto_info.get('tipo') == tipo_atual:
                 sabor = produto_info.get('sabor')
@@ -489,11 +483,10 @@ class VendasUI(ttk.Frame):
         tipo = info.get("tipo", "")
         nome = info.get("nome")
         sabor = info.get("sabor")
-        sabor = sabor if sabor else ""  # Garante que não é None
+        sabor = sabor if sabor else ""
         pid = info.get("id")
         preco = float(info.get("preco", 0.0))
 
-        # Verifica se é produto vendido por peso
         if tipo.lower() in ["sorvete", "açaí/sorvete", "açaí"]:
             peso = parse_peso_kg_input(self.peso_var.get())
             if peso <= 0:
@@ -710,12 +703,12 @@ class VendasUI(ttk.Frame):
                 'troco': troco,
                 'items': self.carrinho.copy(),
                 'empresa': {
-                    'nome': 'SABOR DA FRUTA',
-                    'cnpj': '12.345.678/0001-90',
-                    'endereco': 'Rua Exemplo, 123 - Centro',
-                    'telefone': '(11) 98765-4321',
+                    'nome': 'AÇAITERIA O SABOR DA FRUTA',
+                    'cnpj': '13.215.869/0001-03',
+                    'endereco': 'Estrada do pau ferro, pitomba',
+                    'telefone': '(75) 98187-7711',
                     'mensagem': 'Obrigado pela preferencia!',
-                    'site': 'www.sabordafruta.com.br'
+                    'Instagran': '@acaiteriasabordafruta_'
                 }
             }
             
@@ -731,7 +724,7 @@ class VendasUI(ttk.Frame):
                 f"Recebido: R$ {valor_recebido:.2f}\n"
                 f"Troco: R$ {troco:.2f}\n\n"
                 f"Clique em 'IMPRIMIR CUPOM' para escolher\n"
-                f"entre impressão térmica ou cupom digital."
+                f"entre impressão térmica ou gerar PDF."
             )
             
             messagebox.showinfo("Sucesso", msg_sucesso)
@@ -742,7 +735,7 @@ class VendasUI(ttk.Frame):
             messagebox.showerror("Erro", f"Falha ao gravar venda: {e}")
 
     def _escolher_tipo_impressao(self):
-        """Mostra diálogo para escolher entre impressão térmica ou digital"""
+        """Mostra diálogo para escolher entre impressão térmica ou PDF"""
         if not self.ultima_venda_id or not self.ultima_venda_data:
             messagebox.showwarning("Atenção", "Nenhuma venda para imprimir.")
             return
@@ -750,13 +743,13 @@ class VendasUI(ttk.Frame):
         # Cria janela de escolha
         escolha = ttk.Toplevel(self)
         escolha.title("Escolha o Tipo de Cupom")
-        escolha.geometry("500x350")
+        escolha.geometry("550x380")
         escolha.resizable(False, False)
         
         # Centraliza janela
         escolha.update_idletasks()
-        x = (escolha.winfo_screenwidth() // 2) - (500 // 2)
-        y = (escolha.winfo_screenheight() // 2) - (350 // 2)
+        x = (escolha.winfo_screenwidth() // 2) - (550 // 2)
+        y = (escolha.winfo_screenheight() // 2) - (380 // 2)
         escolha.geometry(f"+{x}+{y}")
         
         # Container
@@ -782,14 +775,14 @@ class VendasUI(ttk.Frame):
         botoes_frame = ttk.Frame(container)
         botoes_frame.pack(fill=BOTH, expand=True)
         
-        # Botão Impressora Térmica
+        # ========== BOTÃO 1: IMPRESSORA TÉRMICA ==========
         if IMPRESSORA_DISPONIVEL:
             frame_termico = ttk.Frame(botoes_frame)
             frame_termico.pack(side=LEFT, padx=10, fill=BOTH, expand=True)
             
             btn_termico = ttk.Button(
                 frame_termico,
-                text="🖨️\n\nIMPRESSORA\nTÉRMICA\n\n(Papel)",
+                text="🖨️\n\nIMPRESSORA\nTÉRMICA\n\n(Imprimir)",
                 bootstyle="primary",
                 command=lambda: [escolha.destroy(), self._imprimir_termico()],
                 width=20
@@ -798,28 +791,28 @@ class VendasUI(ttk.Frame):
             
             ttk.Label(
                 frame_termico,
-                text="Cupom impresso\nem papel térmico",
+                text="Imprimir direto\nna impressora térmica",
                 font=("Segoe UI", 9),
                 foreground="gray"
             ).pack(pady=5)
         
-        # Botão QR Code Digital
-        if CUPOM_DIGITAL_DISPONIVEL:
-            frame_digital = ttk.Frame(botoes_frame)
-            frame_digital.pack(side=LEFT, padx=10, fill=BOTH, expand=True)
+        # ========== BOTÃO 2: GERAR PDF ==========
+        if PDF_DISPONIVEL:
+            frame_pdf = ttk.Frame(botoes_frame)
+            frame_pdf.pack(side=LEFT, padx=10, fill=BOTH, expand=True)
             
-            btn_digital = ttk.Button(
-                frame_digital,
-                text="📱\n\nCUPOM\nDIGITAL\n\n(QR Code)",
+            btn_pdf = ttk.Button(
+                frame_pdf,
+                text="📄\n\nGERAR\nPDF\n\n(WhatsApp)",
                 bootstyle="success",
-                command=lambda: [escolha.destroy(), self._imprimir_digital()],
+                command=lambda: [escolha.destroy(), self._gerar_pdf()],
                 width=20
             )
-            btn_digital.pack(fill=BOTH, expand=True, pady=5)
+            btn_pdf.pack(fill=BOTH, expand=True, pady=5)
             
             ttk.Label(
-                frame_digital,
-                text="Cliente escaneia\no QR Code (sem papel!)",
+                frame_pdf,
+                text="Salva PDF para enviar\npelo WhatsApp",
                 font=("Segoe UI", 9),
                 foreground="gray"
             ).pack(pady=5)
@@ -837,10 +830,84 @@ class VendasUI(ttk.Frame):
         escolha.transient(self)
         escolha.grab_set()
 
+    def _gerar_pdf(self):
+        """Gera PDF do cupom para enviar pelo WhatsApp"""
+        if not PDF_DISPONIVEL:
+            messagebox.showwarning(
+                "Aviso", 
+                "Gerador de PDF não disponível.\n\nInstale: pip install reportlab"
+            )
+            return
+        
+        try:
+            # Sugere nome do arquivo
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            nome_sugerido = f"cupom_venda_{self.ultima_venda_id:06d}_{timestamp}.pdf"
+            
+            # Pergunta onde salvar
+            caminho = filedialog.asksaveasfilename(
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf"), ("Todos os arquivos", "*.*")],
+                initialfile=nome_sugerido,
+                title="Salvar Cupom PDF"
+            )
+            
+            if not caminho:  # Usuário cancelou
+                return
+            
+            # Gera PDF
+            gerador = CupomPDF(largura_mm=80)
+            arquivo_gerado = gerador.gerar_cupom(
+                self.ultima_venda_data,
+                output_path=caminho
+            )
+            
+            print(f"📄 PDF gerado: {arquivo_gerado}")
+            
+            # Pergunta se quer abrir
+            resposta = messagebox.askyesno(
+                "PDF Gerado!",
+                f"✅ Cupom PDF gerado com sucesso!\n\n"
+                f"📂 Local: {os.path.basename(arquivo_gerado)}\n\n"
+                f"Deseja abrir o arquivo agora?"
+            )
+            
+            if resposta:
+                # Abre o PDF
+                if sys.platform == 'win32':
+                    os.startfile(arquivo_gerado)
+                elif sys.platform == 'darwin':  # macOS
+                    subprocess.call(['open', arquivo_gerado])
+                else:  # Linux
+                    subprocess.call(['xdg-open', arquivo_gerado])
+            
+            # Desabilita botão e limpa dados
+            if self.btn_imprimir:
+                self.btn_imprimir.config(state="disabled")
+            self.ultima_venda_id = None
+            self.ultima_venda_data = None
+            
+            messagebox.showinfo(
+                "Pronto!",
+                f"📱 Agora você pode:\n\n"
+                f"1. Abrir o WhatsApp Web\n"
+                f"2. Selecionar o contato do cliente\n"
+                f"3. Clicar no 📎 (anexar)\n"
+                f"4. Enviar o arquivo PDF\n\n"
+                f"💚 Cupom digital - sem papel!"
+            )
+        
+        except Exception as e:
+            logging.exception("Erro ao gerar PDF:")
+            messagebox.showerror("Erro", f"Falha ao gerar PDF: {e}")
+
     def _imprimir_termico(self):
         """Imprime cupom na impressora térmica"""
         if not IMPRESSORA_DISPONIVEL:
-            messagebox.showwarning("Aviso", "Impressora térmica não disponível.\nInstale: pip install pywin32")
+            messagebox.showwarning(
+                "Aviso", 
+                "Impressora térmica não disponível.\n\nInstale: pip install pywin32"
+            )
             return
         
         try:
@@ -873,58 +940,6 @@ class VendasUI(ttk.Frame):
         except Exception as e:
             logging.exception("Erro ao imprimir cupom:")
             messagebox.showerror("Erro", f"Falha ao imprimir: {e}")
-
-    def _imprimir_digital(self):
-        """Gera cupom digital com QR Code"""
-        if not CUPOM_DIGITAL_DISPONIVEL:
-            messagebox.showwarning("Aviso", "Cupom digital não disponível.\nInstale: pip install qrcode pillow")
-            return
-        
-        try:
-            # ✅ COM SERVIDOR HTTP (acesso via rede local)
-            cupom = CupomDigital(usar_servidor=True, porta=8080)
-            
-            qr_page_path, cupom_url = cupom.gerar_pagina_qrcode(
-                self.ultima_venda_id,
-                self.ultima_venda_data
-            )
-            
-            print(f"📱 QR Code gerado: {qr_page_path}")
-            print(f"🌐 URL do cupom: {cupom_url}")
-            
-            # Verifica se servidor foi iniciado
-            if cupom.servidor and cupom.servidor.url_base:
-                servidor_url = cupom.servidor.url_base
-                mensagem_rede = f"\n🌐 Servidor: {servidor_url}\n⚠️ PDV e celular devem estar na mesma rede Wi-Fi"
-            else:
-                servidor_url = "Local"
-                mensagem_rede = "\n⚠️ Servidor não iniciado - QR Code só funciona neste computador"
-            
-            # Abre página do QR Code no navegador
-            import webbrowser
-            webbrowser.open(f"file:///{os.path.abspath(qr_page_path)}")
-            
-            messagebox.showinfo(
-                "Cupom Digital Gerado!",
-                f"✅ QR Code da venda #{self.ultima_venda_id} gerado!\n\n"
-                f"📱 Cliente pode escanear o QR Code para\n"
-                f"visualizar o cupom no celular."
-                f"{mensagem_rede}\n\n"
-                f"💚 Você economizou papel!"
-            )
-            
-            if self.btn_imprimir:
-                self.btn_imprimir.config(state="disabled")
-            self.ultima_venda_id = None
-            self.ultima_venda_data = None
-        
-        except Exception as e:
-            logging.exception("Erro ao gerar cupom digital:")
-            messagebox.showerror("Erro", f"Falha ao gerar cupom digital: {e}")
-
-    def _imprimir_cupom(self):
-        """Método legado - redireciona para escolha"""
-        self._escolher_tipo_impressao()
 
     def _limpar_venda(self):
         """Limpa formulário após venda"""

@@ -159,7 +159,7 @@ class CupomDigital:
     
     def gerar_html_cupom(self, venda_data):
         """
-        Gera HTML do cupom estilo térmico
+        Gera HTML do cupom estilo térmico com novo layout
         
         Args:
             venda_data: dict com dados da venda
@@ -172,11 +172,11 @@ class CupomDigital:
         # Formata data/hora
         try:
             dt = datetime.fromisoformat(venda_data['data_venda'])
-            data_str = dt.strftime('%d/%m/%Y às %H:%M:%S')
+            data_str = dt.strftime('%d/%m/%Y %H:%M:%S')
         except:
             data_str = venda_data['data_venda']
         
-        # Monta HTML estilo cupom térmico
+        # Monta HTML estilo cupom térmico com novo layout
         html = f"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -205,10 +205,11 @@ class CupomDigital:
             background: white;
             width: 100%;
             max-width: 400px;
-            padding: 30px 20px;
-            border-radius: 15px;
+            padding: 25px 15px;
+            border-radius: 10px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             animation: slideIn 0.5s ease-out;
+            line-height: 1.6;
         }}
         
         @keyframes slideIn {{
@@ -222,156 +223,125 @@ class CupomDigital:
             }}
         }}
         
-        .header {{
-            text-align: center;
-            border-bottom: 2px dashed #333;
-            padding-bottom: 20px;
-            margin-bottom: 20px;
+        .separador-bold {{
+            border-top: 2px solid #333;
+            margin: 12px 0;
         }}
         
-        .logo {{
-            font-size: 28px;
+        .separador-tracos {{
+            border-top: 1px dashed #333;
+            margin: 12px 0;
+        }}
+        
+        .centro {{
+            text-align: center;
+        }}
+        
+        .empresa-nome {{
+            font-size: 18px;
             font-weight: bold;
-            color: #667eea;
-            margin-bottom: 10px;
+            margin: 10px 0;
             text-transform: uppercase;
-            letter-spacing: 2px;
         }}
         
-        .info {{
-            font-size: 12px;
-            color: #666;
-            line-height: 1.6;
-        }}
-        
-        .titulo {{
-            text-align: center;
-            font-weight: bold;
-            font-size: 16px;
-            margin: 20px 0;
+        .empresa-info {{
+            font-size: 11px;
             color: #333;
+            line-height: 1.8;
+        }}
+        
+        .cupom-tipo {{
+            font-size: 14px;
+            font-weight: bold;
+            margin: 15px 0;
         }}
         
         .venda-info {{
-            font-size: 13px;
-            margin: 15px 0;
+            font-size: 11px;
+            color: #333;
             line-height: 1.8;
-            color: #444;
+            margin: 10px 0;
         }}
         
-        .linha {{
-            border-top: 1px dashed #ccc;
-            margin: 15px 0;
-        }}
-        
-        .linha-dupla {{
-            border-top: 2px solid #333;
-            margin: 20px 0;
+        .itens-cabecalho {{
+            font-size: 10px;
+            font-weight: bold;
+            margin: 10px 0 5px 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 5px;
         }}
         
         .itens {{
-            margin: 20px 0;
+            margin: 10px 0;
         }}
         
         .item {{
-            margin: 15px 0;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-        }}
-        
-        .item-header {{
+            font-size: 10px;
+            margin: 8px 0;
+            padding: 0 5px;
             display: flex;
             justify-content: space-between;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 8px;
-            font-size: 14px;
+            align-items: flex-start;
         }}
         
-        .item-detalhes {{
-            font-size: 12px;
-            color: #666;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 5px;
+        .item-desc {{
+            flex: 1;
+            word-break: break-word;
         }}
         
-        .totais {{
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 2px solid #333;
+        .item-valor {{
+            text-align: right;
+            min-width: 70px;
+        }}
+        
+        .total-secao {{
+            margin: 12px 0;
+            padding: 8px 0;
         }}
         
         .total-linha {{
             display: flex;
             justify-content: space-between;
-            margin: 10px 0;
-            font-size: 14px;
-        }}
-        
-        .total-principal {{
-            font-size: 24px;
             font-weight: bold;
-            color: #667eea;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-            border-radius: 10px;
-            margin: 15px 0;
+            font-size: 14px;
+            margin: 8px 0;
         }}
         
-        .pagamento {{
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 15px 0;
+        .pagamento-secao {{
+            font-size: 11px;
+            margin: 10px 0;
+            padding: 8px 0;
+            line-height: 1.8;
         }}
         
         .pagamento-linha {{
             display: flex;
             justify-content: space-between;
-            margin: 8px 0;
-            font-size: 13px;
         }}
         
         .rodape {{
             text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px dashed #333;
-            font-size: 12px;
-            color: #666;
-        }}
-        
-        .rodape-mensagem {{
-            font-size: 14px;
-            color: #667eea;
-            font-weight: bold;
-            margin: 15px 0;
-        }}
-        
-        .badge {{
-            display: inline-block;
-            background: #667eea;
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
             font-size: 11px;
+            color: #333;
+            margin-top: 15px;
+            line-height: 1.8;
+        }}
+        
+        .rodape-msg {{
             font-weight: bold;
-            margin-top: 10px;
+            margin: 8px 0;
         }}
         
         .btn-imprimir {{
             display: block;
             width: 100%;
-            padding: 15px;
+            padding: 12px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 10px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 14px;
             font-weight: bold;
             cursor: pointer;
             margin-top: 20px;
@@ -398,35 +368,57 @@ class CupomDigital:
 </head>
 <body>
     <div class="cupom">
-        <div class="header">
-            <div class="logo">{empresa.get('nome', 'SABOR DA FRUTA')}</div>
-            <div class="info">
+        <!-- Cabeçalho -->
+        <div class="separador-bold"></div>
+        <div class="centro">
+            <div class="empresa-nome">{empresa.get('nome', 'EMPRESA')}</div>
+        </div>
+        <div class="separador-bold"></div>
+        
+        <!-- Dados Empresa -->
+        <div class="empresa-info centro">
 """
         
         if empresa.get('cnpj'):
-            html += f"                CNPJ: {empresa['cnpj']}<br>\n"
+            html += f"            CNPJ: {empresa['cnpj']}<br>\n"
         if empresa.get('endereco'):
-            html += f"                {empresa['endereco']}<br>\n"
+            html += f"            {empresa['endereco']}<br>\n"
         if empresa.get('telefone'):
-            html += f"                Tel: {empresa['telefone']}<br>\n"
+            html += f"            Tel: {empresa['telefone']}<br>\n"
         
         html += f"""
-            </div>
         </div>
         
-        <div class="titulo">
-            CUPOM NÃO FISCAL
-            <span class="badge">DIGITAL</span>
+        <!-- Separador -->
+        <div class="separador-tracos"></div>
+        
+        <!-- Tipo de Comprovante -->
+        <div class="cupom-tipo centro">
+            NÃO É CUPOM FISCAL
         </div>
         
+        <!-- Separador -->
+        <div class="separador-tracos"></div>
+        
+        <!-- Info Venda -->
         <div class="venda-info">
-            <strong>Venda:</strong> #{venda_data['id']:06d}<br>
-            <strong>Data:</strong> {data_str}<br>
+            <strong>Data:</strong> {data_str} &nbsp;&nbsp;&nbsp; <strong>Venda #:</strong> {venda_data['id']:06d}<br>
             <strong>Operador:</strong> {venda_data.get('operador', 'Sistema')}
         </div>
         
-        <div class="linha-dupla"></div>
+        <!-- Separador -->
+        <div class="separador-tracos"></div>
         
+        <!-- Cabeçalho Itens -->
+        <div class="itens-cabecalho">
+            <span>ITEM  DESCRIÇÃO</span>
+            <span>QTD         VALOR</span>
+        </div>
+        
+        <!-- Separador -->
+        <div class="separador-tracos"></div>
+        
+        <!-- Itens -->
         <div class="itens">
 """
         
@@ -436,82 +428,85 @@ class CupomDigital:
             sabor = item.get('sabor', '')
             
             if sabor:
-                descricao = f"{tipo} - {sabor}"
+                descricao = f"{tipo} {sabor}"
             else:
                 descricao = item.get('produto_nome', tipo)
             
+            # Limita descrição a 16 caracteres
+            descricao = descricao[:16]
+            
             # Quantidade ou peso
             if item.get('peso_kg') is not None:
-                qtd_str = f"{item['peso_kg']:.3f} kg"
+                qtd_str = f"{item['peso_kg']:.3f}kg"
             else:
-                qtd_str = f"{item['quantidade']} un"
+                qtd_str = f"{item['quantidade']}un"
             
-            valor_unit = self._format_brl(item.get('valor_unit', 0))
             subtotal = self._format_brl(item.get('subtotal', 0))
             
-            html += f"""
-            <div class="item">
-                <div class="item-header">
-                    <span>{idx:02d}. {descricao}</span>
-                    <span>R$ {subtotal}</span>
-                </div>
-                <div class="item-detalhes">
-                    <span>{qtd_str} × R$ {valor_unit}</span>
-                </div>
+            html += f"""            <div class="item">
+                <div class="item-desc">{idx:02d}. {descricao}</div>
+                <div class="item-valor">{qtd_str:>8s}  R${subtotal:>7s}</div>
             </div>
 """
         
         html += """
         </div>
         
-        <div class="totais">
+        <!-- Separador Final Itens -->
+        <div class="separador-bold"></div>
+        
+        <!-- Total -->
+        <div class="total-secao">
 """
         
-        # Total
         total = self._format_brl(venda_data.get('total', 0))
         html += f"""
-            <div class="total-linha total-principal">
+            <div class="total-linha">
                 <span>TOTAL</span>
                 <span>R$ {total}</span>
             </div>
-"""
+        </div>
         
-        # Forma de pagamento
-        forma = venda_data.get('forma_pagamento', '')
-        html += f"""
-            <div class="pagamento">
-                <div class="pagamento-linha">
-                    <span><strong>Pagamento:</strong></span>
-                    <span>{forma}</span>
-                </div>
+        <!-- Separador -->
+        <div class="separador-bold"></div>
+        
+        <!-- Pagamento -->
+        <div class="pagamento-secao">
+            <div class="pagamento-linha">
+                <strong>Forma de Pagamento:</strong>
+                <span>{venda_data.get('forma_pagamento', 'N/A')}</span>
+            </div>
 """
         
         # Valor recebido e troco (apenas para dinheiro)
-        if forma.lower() == 'dinheiro':
+        if venda_data.get('forma_pagamento', '').lower() == 'dinheiro':
             valor_recebido = self._format_brl(venda_data.get('valor_recebido', 0))
             troco = self._format_brl(venda_data.get('troco', 0))
             
             html += f"""
-                <div class="pagamento-linha">
-                    <span>Valor Recebido:</span>
-                    <span>R$ {valor_recebido}</span>
-                </div>
-                <div class="pagamento-linha">
-                    <span>Troco:</span>
-                    <span>R$ {troco}</span>
-                </div>
+            <div class="pagamento-linha">
+                <span>Valor Recebido</span>
+                <span>R$ {valor_recebido}</span>
+            </div>
+            <div class="pagamento-linha">
+                <span>Troco</span>
+                <span>R$ {troco}</span>
+            </div>
 """
         
         html += """
-            </div>
         </div>
         
+        <!-- Separador -->
+        <div class="separador-tracos"></div>
+        
+        <!-- Rodapé -->
         <div class="rodape">
 """
         
         mensagem = empresa.get('mensagem', 'Obrigado pela preferência!')
         html += f"""
-            <div class="rodape-mensagem">{mensagem}</div>
+            <div class="rodape-msg">{mensagem}</div>
 """
         
         if empresa.get('site'):
@@ -520,11 +515,12 @@ class CupomDigital:
 """
         
         html += f"""
-            <div style="margin-top: 15px; font-size: 11px; color: #999;">
-                Cupom digital - Sem valor fiscal<br>
-                Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')}
+            <div style="margin-top: 10px; font-size: 10px;">
+                Gerado em {datetime.now().strftime('%d/%m %H:%M')}
             </div>
         </div>
+        
+        <div class="separador-bold"></div>
         
         <button class="btn-imprimir" onclick="window.print()">
             🖨️ IMPRIMIR CUPOM
@@ -616,7 +612,7 @@ class CupomDigital:
         else:
             ip_info = ""
         
-        # Gera página com QR Code
+        # Gera página com QR Code (código igual ao anterior, sem alterações CSS)
         qr_page = f"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -851,12 +847,13 @@ def testar_cupom_digital():
         'valor_recebido': 50.00,
         'troco': 4.50,
         'empresa': {
-            'nome': 'SABOR DA FRUTA',
-            'cnpj': '12.345.678/0001-90',
-            'endereco': 'Rua Exemplo, 123 - Centro',
-            'telefone': '(11) 98765-4321',
-            'mensagem': 'Volte sempre!',
-            'site': 'www.sabordafruta.com.br'
+            'nome': 
+            'AÇAITERIA O SABOR DA FRUTA',
+            'cnpj': '13.215.869/0001-03',
+            'endereco': 'Estrada do pau ferro, pitomba',
+            'telefone': '(75) 98187-7711',
+            'mensagem': 'Obrigado pela preferencia!',
+            'Instagran': '@acaiteriasabordafruta_'
         },
         'items': [
             {
